@@ -278,9 +278,11 @@ function hideSidebar() {
     if (sidebarContainer) {
       isAnimating = true;
       sidebarContainer.classList.remove('visible');
+      sidebarContainer.classList.add('hiding');
 
       // Reset animation flag after transition completes
       setTimeout(() => {
+        sidebarContainer.classList.remove('hiding');
         isAnimating = false;
       }, 300); // Match CSS transition duration
     }
@@ -459,6 +461,12 @@ async function sendMessage() {
 
   // Clear input and reset its height
   clearMessageInput();
+
+  // Show typing indicator briefly for better UX
+  showTypingIndicator();
+  setTimeout(() => {
+    hideTypingIndicator();
+  }, 1000);
 
   // Save message to storage
   try {
@@ -815,6 +823,40 @@ function showWelcomeMessage() {
   }
 }
 
+// Function to show typing indicator
+function showTypingIndicator() {
+  if (!sidebarContainer) return;
+
+  const messageList = sidebarContainer.querySelector('#message-list');
+  const existingTyping = messageList.querySelector('.typing-indicator');
+
+  if (!existingTyping) {
+    const typingElement = document.createElement('div');
+    typingElement.className = 'typing-indicator';
+    typingElement.innerHTML = `
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    `;
+    messageList.appendChild(typingElement);
+    
+    // Auto-scroll to show typing indicator
+    scrollToLatestMessage();
+  }
+}
+
+// Function to hide typing indicator
+function hideTypingIndicator() {
+  if (!sidebarContainer) return;
+
+  const messageList = sidebarContainer.querySelector('#message-list');
+  const typingElement = messageList.querySelector('.typing-indicator');
+
+  if (typingElement) {
+    typingElement.remove();
+  }
+}
+
 // Enhanced auto-scroll functionality
 function scrollToLatestMessage(smooth = true) {
   if (!sidebarContainer) return;
@@ -873,9 +915,13 @@ function addMessageToHistory(message, shouldScroll = true) {
     scrollToLatestMessage();
   }
 
-  // Add fade-in animation
+  // Add animation based on message type
   requestAnimationFrame(() => {
-    messageElement.classList.add('message-fade-in');
+    if (message.type === 'user') {
+      messageElement.classList.add('message-bounce');
+    } else {
+      messageElement.classList.add('message-fade-in');
+    }
   });
 
   // Limit message history to prevent memory issues

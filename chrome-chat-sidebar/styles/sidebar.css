@@ -32,10 +32,11 @@
   flex-direction: column !important;
   box-sizing: border-box !important;
   
-  /* Enhanced smooth animations */
-  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  /* Enhanced smooth animations with modern easing */
+  transition: right 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
+              box-shadow 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
   transform: translateZ(0) !important; /* Force hardware acceleration */
-  will-change: right !important;
+  will-change: right, box-shadow !important;
   
   /* Prevent interaction with page content */
   pointer-events: auto !important;
@@ -46,14 +47,47 @@
   text-rendering: optimizeLegibility !important;
 }
 
-/* Visible state with enhanced animation */
-.chrome-chat-sidebar-container.visible {
-  right: 0 !important;
+/* Visible state - handled by animation above */
+
+/* Enhanced hover effect with subtle animation */
+.chrome-chat-sidebar-container:hover {
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.25) !important;
 }
 
-/* Hover effect for better visual feedback */
-.chrome-chat-sidebar-container:hover {
-  box-shadow: -6px 0 25px rgba(0, 0, 0, 0.2) !important;
+/* Sidebar entrance animation */
+.chrome-chat-sidebar-container.visible {
+  animation: slideInFromRight 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards !important;
+}
+
+/* Sidebar exit animation */
+.chrome-chat-sidebar-container.hiding {
+  animation: slideOutToRight 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19) forwards !important;
+}
+
+@keyframes slideInFromRight {
+  0% {
+    right: -350px !important;
+    opacity: 0.8 !important;
+    transform: translateX(20px) !important;
+  }
+  100% {
+    right: 0 !important;
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+  }
+}
+
+@keyframes slideOutToRight {
+  0% {
+    right: 0 !important;
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+  }
+  100% {
+    right: -350px !important;
+    opacity: 0.8 !important;
+    transform: translateX(20px) !important;
+  }
 }
 
 /* Sidebar Header with enhanced styling */
@@ -67,6 +101,23 @@
   flex-shrink: 0 !important;
   min-height: 60px !important;
   box-sizing: border-box !important;
+  position: relative !important;
+}
+
+.chrome-chat-sidebar-container .sidebar-header::after {
+  content: '' !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent 0%, #0969da 50%, transparent 100%) !important;
+  opacity: 0 !important;
+  transition: opacity 0.3s ease !important;
+}
+
+.chrome-chat-sidebar-container.visible .sidebar-header::after {
+  opacity: 0.3 !important;
 }
 
 .chrome-chat-sidebar-container .sidebar-title,
@@ -105,12 +156,12 @@
 .chrome-chat-sidebar-container .close-btn:hover {
   background-color: #f3f4f6 !important;
   color: #24292f !important;
-  transform: scale(1.05) !important;
+  transform: scale(1.05) rotate(90deg) !important;
 }
 
 .chrome-chat-sidebar-container .close-btn:active {
   background-color: #e5e7eb !important;
-  transform: scale(0.95) !important;
+  transform: scale(0.95) rotate(90deg) !important;
 }
 
 .chrome-chat-sidebar-container .close-btn:focus {
@@ -156,20 +207,27 @@
   display: block !important;
 }
 
-/* Message Items */
+/* Message Items with enhanced animations */
 .chrome-chat-sidebar-container .message-item {
   display: flex !important;
   flex-direction: column !important;
   margin-bottom: 8px !important;
   opacity: 0 !important;
-  transform: translateY(10px) !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transform: translateY(20px) scale(0.95) !important;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
 }
 
 .chrome-chat-sidebar-container .message-item.message-fade-in {
   opacity: 1 !important;
-  transform: translateY(0) !important;
+  transform: translateY(0) scale(1) !important;
 }
+
+/* Staggered animation for multiple messages */
+.chrome-chat-sidebar-container .message-item:nth-child(1) { transition-delay: 0ms !important; }
+.chrome-chat-sidebar-container .message-item:nth-child(2) { transition-delay: 50ms !important; }
+.chrome-chat-sidebar-container .message-item:nth-child(3) { transition-delay: 100ms !important; }
+.chrome-chat-sidebar-container .message-item:nth-child(4) { transition-delay: 150ms !important; }
+.chrome-chat-sidebar-container .message-item:nth-child(5) { transition-delay: 200ms !important; }
 
 /* Message Bubbles */
 .chrome-chat-sidebar-container .message-bubble {
@@ -185,7 +243,28 @@
 }
 
 .chrome-chat-sidebar-container .message-bubble:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Bounce animation for new messages */
+@keyframes messageBounce {
+  0% {
+    transform: translateY(20px) scale(0.9);
+    opacity: 0;
+  }
+  50% {
+    transform: translateY(-5px) scale(1.02);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.chrome-chat-sidebar-container .message-item.message-bounce {
+  animation: messageBounce 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards !important;
 }
 
 /* User messages (right-aligned, blue) */
@@ -329,6 +408,70 @@
   100% { transform: rotate(360deg); }
 }
 
+/* Typing indicator animation */
+@keyframes typingDots {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
+}
+
+.chrome-chat-sidebar-container .typing-indicator {
+  display: flex !important;
+  align-items: center !important;
+  padding: 12px 16px !important;
+  margin: 8px 0 !important;
+  background: #f6f8fa !important;
+  border-radius: 18px !important;
+  max-width: 85% !important;
+  align-self: flex-start !important;
+}
+
+.chrome-chat-sidebar-container .typing-indicator .dot {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: #656d76 !important;
+  margin: 0 2px !important;
+  animation: typingDots 1.4s infinite ease-in-out !important;
+}
+
+.chrome-chat-sidebar-container .typing-indicator .dot:nth-child(1) {
+  animation-delay: 0s !important;
+}
+
+.chrome-chat-sidebar-container .typing-indicator .dot:nth-child(2) {
+  animation-delay: 0.2s !important;
+}
+
+.chrome-chat-sidebar-container .typing-indicator .dot:nth-child(3) {
+  animation-delay: 0.4s !important;
+}
+
+/* Pulse animation for loading states */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.chrome-chat-sidebar-container .loading-state {
+  animation: pulse 2s infinite ease-in-out !important;
+}
+
 .chrome-chat-sidebar-container .loading-state p {
   all: initial !important;
   margin: 0 !important;
@@ -424,6 +567,8 @@
 .chrome-chat-sidebar-container .message-input-container.focused {
   border-top-color: #0969da !important;
   background: #f8f9fa !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 -2px 8px rgba(9, 105, 218, 0.1) !important;
 }
 
 /* Input wrapper for textarea and character count */
@@ -484,8 +629,10 @@
 
 .chrome-chat-sidebar-container #message-input:focus {
   border-color: #0969da !important;
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1) !important;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1), 
+              0 2px 8px rgba(9, 105, 218, 0.15) !important;
   background: #ffffff !important;
+  transform: translateY(-1px) !important;
 }
 
 /* Enhanced placeholder styling */
@@ -534,10 +681,14 @@
 
 .chrome-chat-sidebar-container .send-btn:hover:not(:disabled) {
   background: #0860ca !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(9, 105, 218, 0.3) !important;
 }
 
 .chrome-chat-sidebar-container .send-btn:active:not(:disabled) {
   background: #0757ba !important;
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 6px rgba(9, 105, 218, 0.2) !important;
 }
 
 /* Disabled state for send button */
