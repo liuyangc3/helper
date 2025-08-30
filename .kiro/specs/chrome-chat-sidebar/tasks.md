@@ -47,8 +47,8 @@
     - Write unit tests for message display functions
     - _Requirements: 4.1, 4.2, 4.5_
 
-- [ ] 5. Implement message input functionality
-  - [ ] 5.1 Create message input box component
+- [x] 5. Implement message input functionality
+  - [x] 5.1 Create message input box component
     - Write HTML structure for message input area at bottom of sidebar
     - Implement CSS styling for input box with placeholder text
     - Create auto-resize functionality for multi-line input
