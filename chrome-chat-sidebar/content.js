@@ -5,40 +5,101 @@ let sidebarContainer = null;
 let isInjected = false;
 let isAnimating = false;
 
-// Initialize content script
+// Initialize content script with error handling
 (function init() {
-  console.log('Chrome Chat Sidebar content script loaded');
-
-  // Ensure DOM is ready before proceeding
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeSidebar);
-  } else {
-    initializeSidebar();
-  }
-})();
-
-function initializeSidebar() {
-  // Check if we should show sidebar on page load
-  chrome.runtime.sendMessage({ action: 'getSidebarState' }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.error('Error getting sidebar state:', chrome.runtime.lastError.message);
+  try {
+    console.log('Chrome Chat Sidebar content script loaded');
+    
+    // Check if we're in a supported environment
+    if (!isEnvironmentSupported()) {
+      console.warn('Chrome Chat Sidebar: Unsupported environment detected');
       return;
     }
     
-    if (response && response.success && response.data.visible) {
-      showSidebar();
+    // Ensure DOM is ready before proceeding
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeSidebar);
+    } else {
+      initializeSidebar();
     }
-  });
-  
-  // Notify background script that content script is ready
-  chrome.runtime.sendMessage({ 
-    action: 'sidebarReady',
-    url: window.location.href 
-  }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.error('Error notifying sidebar ready:', chrome.runtime.lastError.message);
+  } catch (error) {
+    console.error('Chrome Chat Sidebar: Failed to initialize content script:', error);
+    reportError('content_script_init', error);
+  }
+})();
+
+// Check if the current environment supports the sidebar
+function isEnvironmentSupported() {
+  try {
+    // Check if we have access to required APIs
+    if (!chrome || !chrome.runtime) {
+      console.warn('Chrome runtime API not available');
+      return false;
     }
-  });
+    
+    // Check if we can access the DOM
+    if (!document || !document.body) {
+      console.warn('DOM not accessible');
+      return false;
+    }
+    
+    // Check if we're in a frame that might have restrictions
+    if (window !== window.top) {
+      try {
+        // Test if we can access parent window (cross-origin check)
+        const parentOrigin = window.parent.location.origin;
+        if (window.location.origin !== parentOrigin) {
+          console.warn('Cross-origin frame detected, sidebar may not work properly');
+          // Still allow initialization but with warnings
+        }
+      } catch (crossOriginError) {
+        console.warn('Cross-origin frame restrictions detected');
+        // Still allow initialization
+      }
+    }
+    
+    // Check for CSP restrictions
+    if (document.querySelector('meta[http-equiv="Content-Security-Policy"]')) {
+      console.warn('Content Security Policy detected, sidebar may have limitations');
+      // Still allow initialization but log warning
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error checking environment support:', error);
+    return false;
+  }
+}
+
+function initializeSidebar() {
+  try {
+    // Check if we should show sidebar on page load
+    chrome.runtime.sendMessage({ action: 'getSidebarState' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error getting sidebar state:', chrome.runtime.lastError.message);
+        handleRuntimeError(chrome.runtime.lastError);
+        return;
+      }
+      
+      if (response && response.success && response.data.visible) {
+        showSidebar();
+      }
+    });
+    
+    // Notify background script that content script is ready
+    chrome.runtime.sendMessage({ 
+      action: 'sidebarReady',
+      url: window.location.href 
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error notifying sidebar ready:', chrome.runtime.lastError.message);
+        handleRuntimeError(chrome.runtime.lastError);
+      }
+    });
+  } catch (error) {
+    console.error('Error initializing sidebar:', error);
+    reportError('sidebar_init', error);
+  }
 }
 
 // Listen for messages from background script
@@ -237,32 +298,19 @@ function showSidebar() {
   try {
     // Inject sidebar if not already done
     if (!isInjected) {
-      const sidebar = createSidebar();
-
-      // Ensure we can inject into the page
-      if (!document.body) {
-        console.error('Cannot inject sidebar: document.body not available');
+      const injectionResult = attemptSidebarInjection();
+      if (!injectionResult.success) {
+        console.error('Failed to inject sidebar:', injectionResult.error);
+        showInjectionErrorMessage(injectionResult.error);
         return;
       }
-
-      // Check for potential conflicts with existing elements
-      const existingSidebar = document.getElementById('chrome-chat-sidebar');
-      if (existingSidebar && existingSidebar !== sidebarContainer) {
-        existingSidebar.remove();
-      }
-
-      document.body.appendChild(sidebar);
-      isInjected = true;
-
-      // Force reflow to ensure initial position is set
-      sidebar.offsetHeight;
     }
 
     if (sidebarContainer) {
       isAnimating = true;
       sidebarContainer.classList.add('visible');
 
-      // Update background script state
+      // Update background script state with error handling
       chrome.runtime.sendMessage({
         action: 'setSidebarState',
         visible: true,
@@ -271,6 +319,7 @@ function showSidebar() {
       }, (response) => {
         if (chrome.runtime.lastError) {
           console.error('Error updating sidebar state:', chrome.runtime.lastError.message);
+          handleRuntimeError(chrome.runtime.lastError);
         }
       });
 
@@ -293,7 +342,178 @@ function showSidebar() {
     }
   } catch (error) {
     console.error('Error showing sidebar:', error);
+    reportError('show_sidebar', error);
     isAnimating = false;
+    showInjectionErrorMessage('Unexpected error occurred while showing sidebar');
+  }
+}
+
+// Attempt to inject sidebar with comprehensive error handling
+function attemptSidebarInjection() {
+  try {
+    // Check if document.body is available
+    if (!document.body) {
+      return { 
+        success: false, 
+        error: 'Document body not available. The page may still be loading.' 
+      };
+    }
+    
+    // Check for CSP restrictions that might block our injection
+    if (hasCSPRestrictions()) {
+      console.warn('Content Security Policy restrictions detected');
+      // Continue with injection but log warning
+    }
+    
+    // Check for potential conflicts with existing elements
+    const existingSidebar = document.getElementById('chrome-chat-sidebar');
+    if (existingSidebar && existingSidebar !== sidebarContainer) {
+      console.warn('Removing conflicting sidebar element');
+      existingSidebar.remove();
+    }
+    
+    // Create sidebar
+    const sidebar = createSidebar();
+    if (!sidebar) {
+      return { 
+        success: false, 
+        error: 'Failed to create sidebar element' 
+      };
+    }
+    
+    // Attempt to append to body
+    try {
+      document.body.appendChild(sidebar);
+    } catch (appendError) {
+      return { 
+        success: false, 
+        error: `Failed to append sidebar to page: ${appendError.message}` 
+      };
+    }
+    
+    isInjected = true;
+    
+    // Force reflow to ensure initial position is set
+    sidebar.offsetHeight;
+    
+    return { success: true };
+    
+  } catch (error) {
+    return { 
+      success: false, 
+      error: `Injection failed: ${error.message}` 
+    };
+  }
+}
+
+// Check for CSP restrictions
+function hasCSPRestrictions() {
+  try {
+    // Check for CSP meta tags
+    const cspMeta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+    if (cspMeta) {
+      const cspContent = cspMeta.getAttribute('content');
+      if (cspContent && (cspContent.includes("'unsafe-inline'") === false || cspContent.includes('style-src') !== -1)) {
+        return true;
+      }
+    }
+    
+    // Check for CSP headers (we can't directly access them, but we can test injection)
+    const testElement = document.createElement('div');
+    testElement.style.cssText = 'position: absolute; top: -9999px;';
+    
+    try {
+      document.body.appendChild(testElement);
+      document.body.removeChild(testElement);
+      return false; // No CSP restrictions detected
+    } catch (cspError) {
+      return true; // CSP restrictions likely present
+    }
+  } catch (error) {
+    console.warn('Error checking CSP restrictions:', error);
+    return false; // Assume no restrictions if we can't check
+  }
+}
+
+// Show user-friendly error message for injection failures
+function showInjectionErrorMessage(errorMessage) {
+  try {
+    // Create a simple error notification that doesn't rely on our main sidebar
+    const errorNotification = document.createElement('div');
+    errorNotification.id = 'chrome-chat-sidebar-error';
+    errorNotification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #ff4444;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 4px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      z-index: 2147483647;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      max-width: 300px;
+      word-wrap: break-word;
+    `;
+    
+    errorNotification.innerHTML = `
+      <div style="font-weight: bold; margin-bottom: 4px;">Chat Sidebar Error</div>
+      <div>${escapeHtml(errorMessage)}</div>
+      <div style="margin-top: 8px; font-size: 12px; opacity: 0.9;">
+        Try refreshing the page or check if the page allows extensions.
+      </div>
+    `;
+    
+    // Add close button
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '×';
+    closeButton.style.cssText = `
+      position: absolute;
+      top: 4px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    
+    closeButton.onclick = () => {
+      if (errorNotification.parentNode) {
+        errorNotification.parentNode.removeChild(errorNotification);
+      }
+    };
+    
+    errorNotification.appendChild(closeButton);
+    
+    // Try to append to body, with fallback to documentElement
+    try {
+      document.body.appendChild(errorNotification);
+    } catch (bodyError) {
+      try {
+        document.documentElement.appendChild(errorNotification);
+      } catch (docError) {
+        console.error('Cannot show error notification:', docError);
+        return;
+      }
+    }
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+      if (errorNotification.parentNode) {
+        errorNotification.parentNode.removeChild(errorNotification);
+      }
+    }, 10000);
+    
+  } catch (error) {
+    console.error('Failed to show injection error message:', error);
   }
 }
 
@@ -751,6 +971,7 @@ function saveMessageToStorage(message) {
       }, (response) => {
         if (chrome.runtime.lastError) {
           console.error('Error saving message:', chrome.runtime.lastError.message);
+          handleRuntimeError(chrome.runtime.lastError);
           reject(new Error(chrome.runtime.lastError.message));
           return;
         }
@@ -758,15 +979,149 @@ function saveMessageToStorage(message) {
         if (response && response.success) {
           resolve(response.data);
         } else {
-          console.error('Failed to save message:', response?.error);
-          reject(new Error(response?.error || 'Unknown error'));
+          const errorMessage = response?.error || 'Unknown error';
+          console.error('Failed to save message:', errorMessage);
+          
+          // Handle specific storage errors
+          if (errorMessage.includes('quota exceeded') || errorMessage.includes('QUOTA_EXCEEDED')) {
+            showStorageQuotaError();
+          } else if (errorMessage.includes('Storage quota exceeded')) {
+            showStorageQuotaError();
+          }
+          
+          reject(new Error(errorMessage));
         }
       });
     } catch (error) {
       console.error('Error in saveMessageToStorage:', error);
+      reportError('save_message_storage', error);
       reject(error);
     }
   });
+}
+
+// Show storage quota error message
+function showStorageQuotaError() {
+  try {
+    const message = 'Storage is full. Some older messages may be automatically cleaned up to make space.';
+    showTemporaryMessage(message, 'warning');
+    
+    // Offer to clean up storage
+    setTimeout(() => {
+      showStorageCleanupOption();
+    }, 3000);
+    
+  } catch (error) {
+    console.error('Error showing storage quota error:', error);
+  }
+}
+
+// Show storage cleanup option
+function showStorageCleanupOption() {
+  try {
+    // Remove any existing cleanup messages
+    const existingCleanup = document.getElementById('chrome-chat-sidebar-cleanup-option');
+    if (existingCleanup) {
+      existingCleanup.remove();
+    }
+    
+    const cleanupOption = document.createElement('div');
+    cleanupOption.id = 'chrome-chat-sidebar-cleanup-option';
+    cleanupOption.style.cssText = `
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      background: #2196F3;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 4px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      z-index: 2147483647;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      max-width: 300px;
+      word-wrap: break-word;
+    `;
+    
+    cleanupOption.innerHTML = `
+      <div style="font-weight: bold; margin-bottom: 8px;">Free up storage space?</div>
+      <div style="margin-bottom: 12px;">Clean up old messages and data to free up space.</div>
+      <div style="display: flex; gap: 8px;">
+        <button id="cleanup-yes" style="
+          background: white;
+          color: #2196F3;
+          border: none;
+          padding: 6px 12px;
+          border-radius: 3px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: bold;
+        ">Clean Up</button>
+        <button id="cleanup-no" style="
+          background: rgba(255,255,255,0.2);
+          color: white;
+          border: none;
+          padding: 6px 12px;
+          border-radius: 3px;
+          cursor: pointer;
+          font-size: 12px;
+        ">Not Now</button>
+      </div>
+    `;
+    
+    // Add event listeners
+    cleanupOption.querySelector('#cleanup-yes').onclick = () => {
+      performStorageCleanup();
+      cleanupOption.remove();
+    };
+    
+    cleanupOption.querySelector('#cleanup-no').onclick = () => {
+      cleanupOption.remove();
+    };
+    
+    // Try to append to body
+    try {
+      document.body.appendChild(cleanupOption);
+    } catch (bodyError) {
+      document.documentElement.appendChild(cleanupOption);
+    }
+    
+    // Auto-remove after 15 seconds
+    setTimeout(() => {
+      if (cleanupOption.parentNode) {
+        cleanupOption.parentNode.removeChild(cleanupOption);
+      }
+    }, 15000);
+    
+  } catch (error) {
+    console.error('Error showing storage cleanup option:', error);
+  }
+}
+
+// Perform storage cleanup
+function performStorageCleanup() {
+  try {
+    showTemporaryMessage('Cleaning up storage...', 'info');
+    
+    chrome.runtime.sendMessage({ action: 'cleanupStorage' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error during storage cleanup:', chrome.runtime.lastError.message);
+        showTemporaryMessage('Storage cleanup failed. Please try again.', 'error');
+        return;
+      }
+      
+      if (response && response.success) {
+        const freedMB = (response.data.freedBytes / (1024 * 1024)).toFixed(2);
+        showTemporaryMessage(`Storage cleanup completed. Freed ${freedMB} MB of space.`, 'info');
+      } else {
+        showTemporaryMessage('Storage cleanup failed. Please try again.', 'error');
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error performing storage cleanup:', error);
+    showTemporaryMessage('Storage cleanup failed. Please try again.', 'error');
+  }
 }
 
 async function initializeChatHistory() {
@@ -976,6 +1331,192 @@ function limitMessageHistory(maxMessages = 100) {
     for (let i = 0; i < messagesToRemove; i++) {
       messages[i].remove();
     }
+  }
+}
+
+// Error handling and reporting functions
+function handleRuntimeError(runtimeError) {
+  try {
+    const errorMessage = runtimeError.message || 'Unknown runtime error';
+    
+    // Check for specific error types
+    if (errorMessage.includes('Extension context invalidated')) {
+      console.warn('Extension context invalidated - extension may have been reloaded');
+      showContextInvalidatedMessage();
+      return;
+    }
+    
+    if (errorMessage.includes('Could not establish connection')) {
+      console.warn('Could not establish connection with background script');
+      showConnectionErrorMessage();
+      return;
+    }
+    
+    // Generic runtime error handling
+    console.error('Runtime error:', errorMessage);
+    reportError('runtime_error', new Error(errorMessage));
+    
+  } catch (error) {
+    console.error('Error handling runtime error:', error);
+  }
+}
+
+function reportError(errorType, error, context = {}) {
+  try {
+    // Create error report
+    const errorReport = {
+      type: errorType,
+      message: error.message,
+      stack: error.stack,
+      timestamp: Date.now(),
+      url: window.location.href,
+      userAgent: navigator.userAgent,
+      context: context
+    };
+    
+    // Try to send error report to background script
+    chrome.runtime.sendMessage({
+      action: 'reportError',
+      data: errorReport
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        // If we can't send to background script, store locally
+        console.error('Failed to report error to background script:', chrome.runtime.lastError.message);
+        storeErrorLocally(errorReport);
+      }
+    });
+    
+  } catch (reportingError) {
+    console.error('Failed to report error:', reportingError);
+  }
+}
+
+function storeErrorLocally(errorReport) {
+  try {
+    // Store in sessionStorage as a fallback
+    const errorKey = `sidebar_error_${Date.now()}`;
+    const existingErrors = JSON.parse(sessionStorage.getItem('sidebar_errors') || '[]');
+    existingErrors.push(errorReport);
+    
+    // Keep only the last 10 errors
+    if (existingErrors.length > 10) {
+      existingErrors.splice(0, existingErrors.length - 10);
+    }
+    
+    sessionStorage.setItem('sidebar_errors', JSON.stringify(existingErrors));
+  } catch (storageError) {
+    console.error('Failed to store error locally:', storageError);
+  }
+}
+
+function showContextInvalidatedMessage() {
+  try {
+    const message = 'Extension was reloaded. Please refresh the page to use the chat sidebar.';
+    showTemporaryMessage(message, 'warning');
+  } catch (error) {
+    console.error('Error showing context invalidated message:', error);
+  }
+}
+
+function showConnectionErrorMessage() {
+  try {
+    const message = 'Cannot connect to chat sidebar service. Please try refreshing the page.';
+    showTemporaryMessage(message, 'error');
+  } catch (error) {
+    console.error('Error showing connection error message:', error);
+  }
+}
+
+function showTemporaryMessage(message, type = 'info') {
+  try {
+    // Remove any existing temporary messages
+    const existingMessage = document.getElementById('chrome-chat-sidebar-temp-message');
+    if (existingMessage) {
+      existingMessage.remove();
+    }
+    
+    const tempMessage = document.createElement('div');
+    tempMessage.id = 'chrome-chat-sidebar-temp-message';
+    
+    const backgroundColor = {
+      'info': '#2196F3',
+      'warning': '#FF9800',
+      'error': '#F44336'
+    }[type] || '#2196F3';
+    
+    tempMessage.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: ${backgroundColor};
+      color: white;
+      padding: 12px 16px;
+      border-radius: 4px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      z-index: 2147483647;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      max-width: 300px;
+      word-wrap: break-word;
+      animation: slideIn 0.3s ease-out;
+    `;
+    
+    // Add CSS animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    tempMessage.textContent = message;
+    
+    // Add close button
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '×';
+    closeButton.style.cssText = `
+      position: absolute;
+      top: 4px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    
+    closeButton.onclick = () => {
+      if (tempMessage.parentNode) {
+        tempMessage.parentNode.removeChild(tempMessage);
+      }
+    };
+    
+    tempMessage.appendChild(closeButton);
+    
+    // Try to append to body
+    try {
+      document.body.appendChild(tempMessage);
+    } catch (bodyError) {
+      document.documentElement.appendChild(tempMessage);
+    }
+    
+    // Auto-remove after 8 seconds
+    setTimeout(() => {
+      if (tempMessage.parentNode) {
+        tempMessage.parentNode.removeChild(tempMessage);
+      }
+    }, 8000);
+    
+  } catch (error) {
+    console.error('Error showing temporary message:', error);
   }
 }
 
