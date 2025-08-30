@@ -46,7 +46,16 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["styles/sidebar.css"],
+      "resources": [
+        "styles/sidebar.css", 
+        "test-integration.js", 
+        "run-integration-tests.js",
+        "browser-tests.js",
+        "test-websites.js",
+        "tests/e2e.test.js",
+        "tests/performance.test.js",
+        "test-runner.js"
+      ],
       "matches": ["http://*/*", "https://*/*"]
     }
   ]

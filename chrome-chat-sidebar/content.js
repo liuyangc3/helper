@@ -20,8 +20,23 @@ let isAnimating = false;
 function initializeSidebar() {
   // Check if we should show sidebar on page load
   chrome.runtime.sendMessage({ action: 'getSidebarState' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Error getting sidebar state:', chrome.runtime.lastError.message);
+      return;
+    }
+    
     if (response && response.success && response.data.visible) {
       showSidebar();
+    }
+  });
+  
+  // Notify background script that content script is ready
+  chrome.runtime.sendMessage({ 
+    action: 'sidebarReady',
+    url: window.location.href 
+  }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Error notifying sidebar ready:', chrome.runtime.lastError.message);
     }
   });
 }
@@ -247,6 +262,18 @@ function showSidebar() {
       isAnimating = true;
       sidebarContainer.classList.add('visible');
 
+      // Update background script state
+      chrome.runtime.sendMessage({
+        action: 'setSidebarState',
+        visible: true,
+        url: window.location.href,
+        timestamp: Date.now()
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error updating sidebar state:', chrome.runtime.lastError.message);
+        }
+      });
+
       // Reset animation flag after transition completes
       setTimeout(() => {
         isAnimating = false;
@@ -280,18 +307,24 @@ function hideSidebar() {
       sidebarContainer.classList.remove('visible');
       sidebarContainer.classList.add('hiding');
 
+      // Update background script state
+      chrome.runtime.sendMessage({
+        action: 'setSidebarState',
+        visible: false,
+        url: window.location.href,
+        timestamp: Date.now()
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error updating sidebar state:', chrome.runtime.lastError.message);
+        }
+      });
+
       // Reset animation flag after transition completes
       setTimeout(() => {
         sidebarContainer.classList.remove('hiding');
         isAnimating = false;
       }, 300); // Match CSS transition duration
     }
-
-    // Update background script state
-    chrome.runtime.sendMessage({
-      action: 'toggleSidebar',
-      visible: false
-    });
   } catch (error) {
     console.error('Error hiding sidebar:', error);
     isAnimating = false;
@@ -682,7 +715,7 @@ function loadMessagesFromStorage() {
     try {
       chrome.runtime.sendMessage({
         action: 'getMessages',
-        url: window.location.href
+        sessionId: null // Will use current session
       }, (response) => {
         if (chrome.runtime.lastError) {
           console.error('Error loading messages:', chrome.runtime.lastError.message);
@@ -691,7 +724,7 @@ function loadMessagesFromStorage() {
         }
 
         if (response && response.success) {
-          resolve(response.data || []);
+          resolve(response.data.messages || []);
         } else {
           console.error('Failed to load messages:', response?.error);
           reject(new Error(response?.error || 'Unknown error'));
@@ -709,8 +742,12 @@ function saveMessageToStorage(message) {
     try {
       chrome.runtime.sendMessage({
         action: 'saveMessage',
-        message: message,
-        url: window.location.href
+        data: {
+          content: message.content,
+          type: message.type,
+          url: window.location.href,
+          tabId: null // Will be set by background script
+        }
       }, (response) => {
         if (chrome.runtime.lastError) {
           console.error('Error saving message:', chrome.runtime.lastError.message);
@@ -993,6 +1030,118 @@ let lastUrl = window.location.href;
 window.addEventListener('beforeunload', () => {
   // Save current state before page unload
   persistSidebarState();
+});
+
+// Persist sidebar state for cross-navigation
+function persistSidebarState() {
+  if (!sidebarContainer) return;
+  
+  const isVisible = sidebarContainer.classList.contains('visible');
+  
+  chrome.runtime.sendMessage({
+    action: 'setSidebarState',
+    visible: isVisible,
+    url: window.location.href,
+    timestamp: Date.now()
+  }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Error persisting sidebar state:', chrome.runtime.lastError.message);
+    }
+  });
+}
+
+// Handle URL changes for single-page applications
+function handleUrlChange() {
+  const currentUrl = window.location.href;
+  if (currentUrl !== lastUrl) {
+    console.log('URL changed from', lastUrl, 'to', currentUrl);
+    lastUrl = currentUrl;
+    
+    // Persist state for the previous URL and check state for new URL
+    persistSidebarState();
+    
+    // Small delay to allow for page changes
+    setTimeout(() => {
+      initializeSidebar();
+    }, 100);
+  }
+}
+
+// Set up navigation monitoring
+function setupNavigationMonitoring() {
+  // Monitor for URL changes (for SPAs)
+  if (window.history && window.history.pushState) {
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+    
+    window.history.pushState = function(...args) {
+      originalPushState.apply(window.history, args);
+      setTimeout(handleUrlChange, 0);
+    };
+    
+    window.history.replaceState = function(...args) {
+      originalReplaceState.apply(window.history, args);
+      setTimeout(handleUrlChange, 0);
+    };
+  }
+  
+  // Listen for popstate events (back/forward navigation)
+  window.addEventListener('popstate', () => {
+    setTimeout(handleUrlChange, 0);
+  });
+  
+  // Periodic check for URL changes (fallback)
+  stateCheckInterval = setInterval(handleUrlChange, 1000);
+}
+
+// Initialize navigation monitoring
+setupNavigationMonitoring();
+
+// Health check function to ensure background script connection
+function performHealthCheck() {
+  chrome.runtime.sendMessage({ action: 'ping' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.warn('Background script connection lost:', chrome.runtime.lastError.message);
+      // Try to reconnect or handle gracefully
+      setTimeout(performHealthCheck, 5000);
+    } else if (response && response.success) {
+      console.log('Background script connection healthy');
+    }
+  });
+}
+
+// Perform initial health check
+setTimeout(performHealthCheck, 1000);
+
+// Periodic health checks
+setInterval(performHealthCheck, 30000); // Every 30 seconds
+
+// Cleanup function for when content script is unloaded
+function cleanup() {
+  if (stateCheckInterval) {
+    clearInterval(stateCheckInterval);
+  }
+  
+  if (navigationObserver) {
+    navigationObserver.disconnect();
+  }
+  
+  persistSidebarState();
+  removeSidebar();
+}
+
+// Register cleanup handlers
+window.addEventListener('beforeunload', cleanup);
+window.addEventListener('unload', cleanup);
+
+// Handle extension context invalidation
+chrome.runtime.onConnect.addListener((port) => {
+  port.onDisconnect.addListener(() => {
+    if (chrome.runtime.lastError) {
+      console.warn('Extension context invalidated, cleaning up...');
+      cleanup();
+    }
+  });
 });
 
 // Handle page visibility changes
