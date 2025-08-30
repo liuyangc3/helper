@@ -1,0 +1,184 @@
+/* Chrome Chat Sidebar Styles */
+/* CSS isolation and reset for sidebar components */
+
+.chrome-chat-sidebar-container {
+  /* Reset and isolation */
+  all: initial;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  
+  /* Positioning */
+  position: fixed !important;
+  top: 0 !important;
+  right: -350px !important; /* Hidden by default */
+  width: 350px !important;
+  height: 100vh !important;
+  z-index: 2147483647 !important; /* Maximum z-index */
+  
+  /* Styling */
+  background: #ffffff !important;
+  border-left: 1px solid #e0e0e0 !important;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1) !important;
+  
+  /* Layout */
+  display: flex !important;
+  flex-direction: column !important;
+  
+  /* Animation */
+  transition: right 0.3s ease-in-out !important;
+}
+
+.chrome-chat-sidebar-container.visible {
+  right: 0 !important;
+}
+
+/* Sidebar Header */
+.chrome-chat-sidebar-container .sidebar-header {
+  padding: 16px !important;
+  border-bottom: 1px solid #e0e0e0 !important;
+  background: #f8f9fa !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+}
+
+.chrome-chat-sidebar-container .sidebar-header h3 {
+  margin: 0 !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: #333333 !important;
+}
+
+.chrome-chat-sidebar-container .close-btn {
+  background: none !important;
+  border: none !important;
+  font-size: 24px !important;
+  cursor: pointer !important;
+  color: #666666 !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  transition: background-color 0.2s !important;
+}
+
+.chrome-chat-sidebar-container .close-btn:hover {
+  background-color: #e9ecef !important;
+  color: #333333 !important;
+}
+
+/* Chat History Area */
+.chrome-chat-sidebar-container .chat-history {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 16px !important;
+  background: #ffffff !important;
+}
+
+.chrome-chat-sidebar-container .welcome-message {
+  text-align: center !important;
+  color: #666666 !important;
+  margin-top: 50px !important;
+}
+
+.chrome-chat-sidebar-container .welcome-message p {
+  margin: 8px 0 !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+}
+
+/* Message Input Container */
+.chrome-chat-sidebar-container .message-input-container {
+  padding: 16px !important;
+  border-top: 1px solid #e0e0e0 !important;
+  background: #ffffff !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  gap: 8px !important;
+  align-items: flex-end !important;
+}
+
+.chrome-chat-sidebar-container #message-input {
+  flex: 1 !important;
+  min-height: 36px !important;
+  max-height: 120px !important;
+  padding: 8px 12px !important;
+  border: 1px solid #d0d7de !important;
+  border-radius: 6px !important;
+  font-size: 14px !important;
+  font-family: inherit !important;
+  resize: none !important;
+  outline: none !important;
+  transition: border-color 0.2s !important;
+}
+
+.chrome-chat-sidebar-container #message-input:focus {
+  border-color: #0969da !important;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1) !important;
+}
+
+.chrome-chat-sidebar-container #message-input::placeholder {
+  color: #656d76 !important;
+}
+
+.chrome-chat-sidebar-container .send-btn {
+  padding: 8px 16px !important;
+  background: #0969da !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 6px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s !important;
+  height: 36px !important;
+}
+
+.chrome-chat-sidebar-container .send-btn:hover {
+  background: #0860ca !important;
+}
+
+.chrome-chat-sidebar-container .send-btn:active {
+  background: #0757ba !important;
+}
+
+/* Scrollbar Styling */
+.chrome-chat-sidebar-container .chat-history::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+.chrome-chat-sidebar-container .chat-history::-webkit-scrollbar-track {
+  background: #f1f3f4 !important;
+}
+
+.chrome-chat-sidebar-container .chat-history::-webkit-scrollbar-thumb {
+  background: #c1c8cd !important;
+  border-radius: 3px !important;
+}
+
+.chrome-chat-sidebar-container .chat-history::-webkit-scrollbar-thumb:hover {
+  background: #a8b3ba !important;
+}
+
+/* Prevent text selection on UI elements */
+.chrome-chat-sidebar-container .sidebar-header,
+.chrome-chat-sidebar-container .close-btn,
+.chrome-chat-sidebar-container .send-btn {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+  .chrome-chat-sidebar-container {
+    width: 300px !important;
+    right: -300px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .chrome-chat-sidebar-container {
+    width: 280px !important;
+    right: -280px !important;
+  }
+}
