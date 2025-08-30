@@ -78,8 +78,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   switch (message.action) {
     case 'getSidebarState':
-      handleGetSidebarState(sendResponse);
+      handleGetSidebarState(sender.tab?.id, sendResponse);
       return true; // Keep message channel open for async response
+      
+    case 'setSidebarState':
+      handleSetSidebarState(message, sender.tab?.id, sendResponse);
+      return true;
+      
+    case 'toggleSidebar':
+      handleToggleSidebar(message, sender.tab?.id, sendResponse);
+      return true;
       
     case 'saveMessage':
       handleSaveMessage(message.data, sendResponse);
@@ -94,8 +102,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
       
     case 'sidebarReady':
-      handleSidebarReady(sender.tab.id, sendResponse);
+      handleSidebarReady(sender.tab?.id, sendResponse);
       return true;
+      
+    case 'ping':
+      // Health check response
+      sendResponse({ success: true, timestamp: Date.now() });
+      break;
       
     default:
       console.warn('Unknown message action:', message.action);
@@ -135,23 +148,96 @@ function canInjectContentScript(url) {
   }
 }
 
-async function handleGetSidebarState(sendResponse) {
+async function handleGetSidebarState(tabId, sendResponse) {
   try {
-    const result = await chrome.storage.local.get(['sidebarVisible', 'settings', 'currentSession']);
+    // Get both global and tab-specific state
+    const globalResult = await chrome.storage.local.get(['sidebarVisible', 'settings', 'currentSession']);
+    const tabStateKey = `tabState_${tabId}`;
+    const tabResult = await chrome.storage.local.get([tabStateKey]);
+    
+    const tabState = tabResult[tabStateKey] || {};
+    
     sendResponse({
       success: true,
       data: {
-        visible: result.sidebarVisible || false,
-        settings: result.settings || {
+        visible: tabState.visible !== undefined ? tabState.visible : (globalResult.sidebarVisible || false),
+        settings: globalResult.settings || {
           sidebarWidth: 350,
           theme: 'light',
           autoScroll: true
         },
-        sessionId: result.currentSession || generateSessionId()
+        sessionId: globalResult.currentSession || generateSessionId(),
+        tabId: tabId,
+        lastUpdate: tabState.lastUpdate || Date.now()
       }
     });
   } catch (error) {
     console.error('Error getting sidebar state:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+async function handleSetSidebarState(message, tabId, sendResponse) {
+  try {
+    const visible = message.visible || false;
+    const url = message.url || '';
+    const timestamp = message.timestamp || Date.now();
+    
+    // Update global state
+    await chrome.storage.local.set({ sidebarVisible: visible });
+    
+    // Update tab-specific state for cross-navigation persistence
+    if (tabId) {
+      const tabStateKey = `tabState_${tabId}`;
+      await chrome.storage.local.set({
+        [tabStateKey]: {
+          visible: visible,
+          url: url,
+          lastUpdate: timestamp
+        }
+      });
+    }
+    
+    sendResponse({ 
+      success: true, 
+      data: { 
+        visible: visible,
+        tabId: tabId,
+        timestamp: timestamp
+      }
+    });
+  } catch (error) {
+    console.error('Error setting sidebar state:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+async function handleToggleSidebar(message, tabId, sendResponse) {
+  try {
+    const visible = message.visible || false;
+    
+    // Update both global and tab-specific state
+    await chrome.storage.local.set({ sidebarVisible: visible });
+    
+    if (tabId) {
+      const tabStateKey = `tabState_${tabId}`;
+      await chrome.storage.local.set({
+        [tabStateKey]: {
+          visible: visible,
+          lastUpdate: Date.now()
+        }
+      });
+    }
+    
+    sendResponse({ 
+      success: true, 
+      data: { 
+        visible: visible,
+        tabId: tabId
+      }
+    });
+  } catch (error) {
+    console.error('Error toggling sidebar:', error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -413,9 +499,94 @@ async function performMaintenanceCleanup() {
   }
 }
 
+// Handle tab events for better state management
+chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+  try {
+    // Clean up tab-specific state when tab is closed
+    const tabStateKey = `tabState_${tabId}`;
+    await chrome.storage.local.remove([tabStateKey]);
+    console.log(`Cleaned up state for closed tab: ${tabId}`);
+  } catch (error) {
+    console.error('Error cleaning up tab state:', error);
+  }
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  try {
+    // Handle navigation within the same tab
+    if (changeInfo.status === 'complete' && tab.url) {
+      // Check if content script can be injected on this URL
+      if (!canInjectContentScript(tab.url)) {
+        // Clean up state for restricted pages
+        const tabStateKey = `tabState_${tabId}`;
+        await chrome.storage.local.remove([tabStateKey]);
+        return;
+      }
+      
+      // Get current tab state
+      const tabStateKey = `tabState_${tabId}`;
+      const result = await chrome.storage.local.get([tabStateKey]);
+      const tabState = result[tabStateKey];
+      
+      // If sidebar was visible, notify content script to restore it
+      if (tabState && tabState.visible) {
+        try {
+          await chrome.tabs.sendMessage(tabId, {
+            action: 'setSidebarState',
+            visible: true
+          });
+        } catch (messageError) {
+          // Content script might not be ready yet, that's okay
+          console.log('Content script not ready for tab:', tabId);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error handling tab update:', error);
+  }
+});
+
+// Periodic cleanup of old tab states
+async function cleanupTabStates() {
+  try {
+    console.log('Cleaning up old tab states...');
+    
+    // Get all current tabs
+    const tabs = await chrome.tabs.query({});
+    const currentTabIds = new Set(tabs.map(tab => tab.id));
+    
+    // Get all storage data
+    const allData = await chrome.storage.local.get();
+    const keysToRemove = [];
+    
+    // Find tab state keys for tabs that no longer exist
+    for (const key of Object.keys(allData)) {
+      if (key.startsWith('tabState_')) {
+        const tabId = parseInt(key.replace('tabState_', ''));
+        if (!currentTabIds.has(tabId)) {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    
+    if (keysToRemove.length > 0) {
+      await chrome.storage.local.remove(keysToRemove);
+      console.log(`Cleaned up ${keysToRemove.length} old tab states`);
+    }
+  } catch (error) {
+    console.error('Error cleaning up tab states:', error);
+  }
+}
+
 // Run maintenance cleanup on extension startup
 chrome.runtime.onStartup.addListener(() => {
   console.log('Chrome Chat Sidebar extension started');
   // Run cleanup after a short delay to avoid blocking startup
-  setTimeout(performMaintenanceCleanup, 5000);
+  setTimeout(() => {
+    performMaintenanceCleanup();
+    cleanupTabStates();
+  }, 5000);
 });
+
+// Run tab state cleanup periodically
+setInterval(cleanupTabStates, 5 * 60 * 1000); // Every 5 minutes
