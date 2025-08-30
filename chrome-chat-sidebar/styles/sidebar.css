@@ -1,12 +1,20 @@
 /* Chrome Chat Sidebar Styles */
-/* CSS isolation and reset for sidebar components */
+/* Enhanced CSS isolation and reset for sidebar components */
 
+/* Main container with comprehensive isolation */
 .chrome-chat-sidebar-container {
-  /* Reset and isolation */
-  all: initial;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Complete CSS reset and isolation */
+  all: initial !important;
   
-  /* Positioning */
+  /* Font and text properties */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  color: #24292f !important;
+  text-align: left !important;
+  direction: ltr !important;
+  
+  /* Positioning with enhanced isolation */
   position: fixed !important;
   top: 0 !important;
   right: -350px !important; /* Hidden by default */
@@ -14,55 +22,100 @@
   height: 100vh !important;
   z-index: 2147483647 !important; /* Maximum z-index */
   
-  /* Styling */
+  /* Visual styling */
   background: #ffffff !important;
-  border-left: 1px solid #e0e0e0 !important;
-  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1) !important;
+  border-left: 1px solid #d1d9e0 !important;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15) !important;
   
   /* Layout */
   display: flex !important;
   flex-direction: column !important;
+  box-sizing: border-box !important;
   
-  /* Animation */
-  transition: right 0.3s ease-in-out !important;
+  /* Enhanced smooth animations */
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transform: translateZ(0) !important; /* Force hardware acceleration */
+  will-change: right !important;
+  
+  /* Prevent interaction with page content */
+  pointer-events: auto !important;
+  
+  /* Text rendering optimization */
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  text-rendering: optimizeLegibility !important;
 }
 
+/* Visible state with enhanced animation */
 .chrome-chat-sidebar-container.visible {
   right: 0 !important;
 }
 
-/* Sidebar Header */
+/* Hover effect for better visual feedback */
+.chrome-chat-sidebar-container:hover {
+  box-shadow: -6px 0 25px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Sidebar Header with enhanced styling */
 .chrome-chat-sidebar-container .sidebar-header {
   padding: 16px !important;
-  border-bottom: 1px solid #e0e0e0 !important;
-  background: #f8f9fa !important;
+  border-bottom: 1px solid #d1d9e0 !important;
+  background: linear-gradient(180deg, #f6f8fa 0%, #ffffff 100%) !important;
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
   flex-shrink: 0 !important;
+  min-height: 60px !important;
+  box-sizing: border-box !important;
 }
 
+.chrome-chat-sidebar-container .sidebar-title,
 .chrome-chat-sidebar-container .sidebar-header h3 {
+  all: initial !important;
   margin: 0 !important;
+  padding: 0 !important;
   font-size: 18px !important;
   font-weight: 600 !important;
-  color: #333333 !important;
+  color: #24292f !important;
+  font-family: inherit !important;
+  line-height: 1.25 !important;
+  display: block !important;
 }
 
+/* Enhanced close button with better accessibility */
 .chrome-chat-sidebar-container .close-btn {
+  all: initial !important;
   background: none !important;
   border: none !important;
-  font-size: 24px !important;
+  font-size: 20px !important;
   cursor: pointer !important;
-  color: #666666 !important;
-  padding: 4px 8px !important;
-  border-radius: 4px !important;
-  transition: background-color 0.2s !important;
+  color: #656d76 !important;
+  padding: 8px !important;
+  border-radius: 6px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  font-family: inherit !important;
+  line-height: 1 !important;
 }
 
 .chrome-chat-sidebar-container .close-btn:hover {
-  background-color: #e9ecef !important;
-  color: #333333 !important;
+  background-color: #f3f4f6 !important;
+  color: #24292f !important;
+  transform: scale(1.05) !important;
+}
+
+.chrome-chat-sidebar-container .close-btn:active {
+  background-color: #e5e7eb !important;
+  transform: scale(0.95) !important;
+}
+
+.chrome-chat-sidebar-container .close-btn:focus {
+  outline: 2px solid #0969da !important;
+  outline-offset: 2px !important;
 }
 
 /* Chat History Area */
@@ -168,6 +221,50 @@
   -ms-user-select: none !important;
 }
 
+/* Enhanced CSS isolation - prevent inheritance from host page */
+.chrome-chat-sidebar-container,
+.chrome-chat-sidebar-container * {
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  font-size: 100% !important;
+  font: inherit !important;
+  vertical-align: baseline !important;
+  background: transparent !important;
+  color: inherit !important;
+  text-decoration: none !important;
+  list-style: none !important;
+  quotes: none !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Re-apply necessary styles after reset */
+.chrome-chat-sidebar-container {
+  background: #ffffff !important;
+  color: #24292f !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+/* Prevent host page styles from affecting sidebar */
+.chrome-chat-sidebar-container * {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  color: inherit !important;
+}
+
+/* Animation performance optimization */
+.chrome-chat-sidebar-container {
+  backface-visibility: hidden !important;
+  perspective: 1000px !important;
+}
+
 /* Responsive adjustments for smaller screens */
 @media (max-width: 768px) {
   .chrome-chat-sidebar-container {
@@ -180,5 +277,39 @@
   .chrome-chat-sidebar-container {
     width: 280px !important;
     right: -280px !important;
+  }
+  
+  .chrome-chat-sidebar-container .sidebar-header {
+    padding: 12px !important;
+  }
+  
+  .chrome-chat-sidebar-container .message-input-container {
+    padding: 12px !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .chrome-chat-sidebar-container {
+    border-left: 2px solid #000000 !important;
+  }
+  
+  .chrome-chat-sidebar-container .sidebar-header {
+    border-bottom: 2px solid #000000 !important;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .chrome-chat-sidebar-container {
+    transition: none !important;
+  }
+  
+  .chrome-chat-sidebar-container .close-btn {
+    transition: none !important;
+  }
+  
+  .chrome-chat-sidebar-container .send-btn {
+    transition: none !important;
   }
 }
