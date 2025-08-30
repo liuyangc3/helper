@@ -54,7 +54,7 @@
     - Create auto-resize functionality for multi-line input
     - _Requirements: 2.2, 3.5_
 
-  - [ ] 5.2 Handle message sending and input events
+  - [x] 5.2 Handle message sending and input events
     - Implement Enter key handler to send messages
     - Add Shift+Enter support for new lines in input
     - Create message validation and sanitization functions
