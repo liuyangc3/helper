@@ -6,14 +6,16 @@
   - Set up basic file structure with placeholder files
   - _Requirements: 1.1, 5.1_
 
-- [ ] 2. Implement background service worker
-  - [ ] 2.1 Create background script with extension lifecycle management
+- [x] 2. Implement background service worker
+  - [x] 2.1 Create background script with extension lifecycle management
     - Write background.js with service worker event listeners
     - Implement extension icon click handler to toggle sidebar state
     - Create message passing system between background and content scripts
     - _Requirements: 1.1, 1.4_
 
-  - [ ] 2.2 Implement storage management for chat data
+  - [x] 2.2 Implement storage management for chat data
+
+
     - Write functions to save and retrieve messages using Chrome Storage API
     - Implement chat session management with unique session IDs
     - Create data cleanup functions for old messages
