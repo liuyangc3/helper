@@ -242,6 +242,35 @@
   margin-bottom: 16px !important;
 }
 
+/* Message error states */
+.chrome-chat-sidebar-container .message-item.message-error .message-bubble {
+  border: 1px solid #d1242f !important;
+  box-shadow: 0 0 0 2px rgba(209, 36, 47, 0.1) !important;
+}
+
+.chrome-chat-sidebar-container .message-error-indicator {
+  margin-top: 8px !important;
+  padding: 6px 8px !important;
+  background: #fff5f5 !important;
+  border: 1px solid #fecaca !important;
+  border-radius: 4px !important;
+  font-size: 12px !important;
+  color: #d1242f !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.chrome-chat-sidebar-container .message-error-indicator .error-icon {
+  font-size: 14px !important;
+}
+
+.chrome-chat-sidebar-container .message-error-indicator .error-text {
+  flex: 1 !important;
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+}
+
 /* Consecutive message grouping */
 .chrome-chat-sidebar-container .message-item + .message-item[data-message-type="user"] .message-bubble.user {
   margin-top: -4px !important;
@@ -387,6 +416,51 @@
   display: flex !important;
   gap: 8px !important;
   align-items: flex-end !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+  position: relative !important;
+}
+
+/* Enhanced focus state for input container */
+.chrome-chat-sidebar-container .message-input-container.focused {
+  border-top-color: #0969da !important;
+  background: #f8f9fa !important;
+}
+
+/* Input wrapper for textarea and character count */
+.chrome-chat-sidebar-container .input-wrapper {
+  flex: 1 !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Character count display */
+.chrome-chat-sidebar-container .character-count {
+  position: absolute !important;
+  bottom: 2px !important;
+  right: 8px !important;
+  font-size: 11px !important;
+  color: #656d76 !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  padding: 2px 4px !important;
+  border-radius: 3px !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  transition: opacity 0.2s ease !important;
+}
+
+.chrome-chat-sidebar-container .input-wrapper:hover .character-count,
+.chrome-chat-sidebar-container .message-input-container.focused .character-count {
+  opacity: 1 !important;
+}
+
+/* Warning state for character count */
+.chrome-chat-sidebar-container .character-count.warning {
+  color: #d97706 !important;
+}
+
+.chrome-chat-sidebar-container .character-count.danger {
+  color: #d1242f !important;
 }
 
 .chrome-chat-sidebar-container #message-input {
@@ -400,12 +474,43 @@
   font-family: inherit !important;
   resize: none !important;
   outline: none !important;
-  transition: border-color 0.2s !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+  overflow-y: hidden !important;
+  line-height: 1.4 !important;
+  background: #ffffff !important;
+  color: #24292f !important;
+  box-sizing: border-box !important;
 }
 
 .chrome-chat-sidebar-container #message-input:focus {
   border-color: #0969da !important;
   box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1) !important;
+  background: #ffffff !important;
+}
+
+/* Enhanced placeholder styling */
+.chrome-chat-sidebar-container #message-input::placeholder {
+  color: #656d76 !important;
+  opacity: 1 !important;
+  font-style: italic !important;
+}
+
+/* Scrollbar styling for textarea when content exceeds max height */
+.chrome-chat-sidebar-container #message-input::-webkit-scrollbar {
+  width: 4px !important;
+}
+
+.chrome-chat-sidebar-container #message-input::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.chrome-chat-sidebar-container #message-input::-webkit-scrollbar-thumb {
+  background: #c1c8cd !important;
+  border-radius: 2px !important;
+}
+
+.chrome-chat-sidebar-container #message-input::-webkit-scrollbar-thumb:hover {
+  background: #a8b3ba !important;
 }
 
 .chrome-chat-sidebar-container #message-input::placeholder {
@@ -421,16 +526,33 @@
   font-size: 14px !important;
   font-weight: 500 !important;
   cursor: pointer !important;
-  transition: background-color 0.2s !important;
+  transition: background-color 0.2s ease, opacity 0.2s ease !important;
   height: 36px !important;
+  min-width: 60px !important;
+  font-family: inherit !important;
 }
 
-.chrome-chat-sidebar-container .send-btn:hover {
+.chrome-chat-sidebar-container .send-btn:hover:not(:disabled) {
   background: #0860ca !important;
 }
 
-.chrome-chat-sidebar-container .send-btn:active {
+.chrome-chat-sidebar-container .send-btn:active:not(:disabled) {
   background: #0757ba !important;
+}
+
+/* Disabled state for send button */
+.chrome-chat-sidebar-container .send-btn:disabled,
+.chrome-chat-sidebar-container .send-btn.disabled {
+  background: #d1d9e0 !important;
+  color: #656d76 !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
+
+.chrome-chat-sidebar-container .send-btn:disabled:hover,
+.chrome-chat-sidebar-container .send-btn.disabled:hover {
+  background: #d1d9e0 !important;
+  color: #656d76 !important;
 }
 
 /* Scrollbar Styling */
