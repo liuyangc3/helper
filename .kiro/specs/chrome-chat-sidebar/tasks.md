@@ -76,15 +76,15 @@
     - Write CSS for modern, Slack-like visual design
     - _Requirements: 2.4_
 
-- [ ] 7. Integrate all components and test core functionality
-  - [ ] 7.1 Wire together background script, content script, and UI components
+- [x] 7. Integrate all components and test core functionality
+  - [x] 7.1 Wire together background script, content script, and UI components
     - Connect message passing between background and content scripts
     - Integrate storage operations with UI updates
     - Implement complete message flow from input to display
     - Test sidebar toggle functionality across different websites
     - _Requirements: 1.1, 1.4, 4.1, 4.2_
 
-  - [ ] 7.2 Create comprehensive test suite
+  - [x] 7.2 Create comprehensive test suite
     - Write unit tests for all core functions (storage, message handling, UI operations)
     - Create integration tests for content script injection and communication
     - Implement end-to-end tests for complete user workflows
