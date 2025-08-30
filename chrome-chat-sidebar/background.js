@@ -197,13 +197,13 @@ async function checkAndHandleInjection(tab) {
       let reason = 'Restricted page';
       
       if (tab.url.startsWith('chrome:')) {
-        reason = 'Chrome internal pages are not supported';
+        reason = 'Chat sidebar cannot be used on Chrome internal pages (chrome://)';
       } else if (tab.url.startsWith('file:')) {
-        reason = 'Local files are not supported';
+        reason = 'Chat sidebar cannot be used on local files (file://)';
       } else if (tab.url.startsWith('chrome-extension:')) {
-        reason = 'Extension pages are not supported';
+        reason = 'Chat sidebar cannot be used on extension pages';
       } else if (urlObj.hostname.includes('chrome.google.com')) {
-        reason = 'Chrome Web Store pages are not supported';
+        reason = 'Chat sidebar cannot be used on Chrome Web Store pages';
       }
       
       return { success: false, reason };
@@ -257,29 +257,52 @@ async function sendMessageWithRetry(tabId, message, maxRetries = 3, delay = 1000
   }
 }
 
-// Show user-friendly error for injection failures
+// Show user-friendly message for injection restrictions and errors
+// Distinguishes between expected restrictions (Chrome internal pages) and actual errors
 async function showInjectionError(tab, reason) {
   try {
-    // Log the error for debugging
-    await logError('injection_failed', new Error(reason), { 
-      tabId: tab.id, 
-      url: tab.url,
-      reason 
-    });
+    // Determine if this is an expected restriction or an actual error
+    const isExpectedRestriction = reason.includes('Chrome internal pages') || 
+                                 reason.includes('local files') || 
+                                 reason.includes('extension pages') || 
+                                 reason.includes('Chrome Web Store');
     
-    // Try to show a notification (if permissions allow)
-    if (chrome.notifications) {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Chat Sidebar Unavailable',
-        message: reason
+    if (isExpectedRestriction) {
+      // Log as info rather than error for expected restrictions
+      console.info(`[restriction_info] ${reason}`, { 
+        tabId: tab.id, 
+        url: tab.url 
+      });
+    } else {
+      // Log as actual error for unexpected injection failures
+      await logError('injection_failed', new Error(reason), { 
+        tabId: tab.id, 
+        url: tab.url,
+        reason 
       });
     }
     
-    // Update extension badge to indicate error
-    chrome.action.setBadgeText({ text: '!', tabId: tab.id });
-    chrome.action.setBadgeBackgroundColor({ color: '#ff4444', tabId: tab.id });
+    // Try to show a notification (if permissions allow)
+    if (chrome.notifications) {
+      const title = isExpectedRestriction ? 'Chat Sidebar Not Available' : 'Chat Sidebar Error';
+      const message = isExpectedRestriction ? 
+        `${reason}. Try using the sidebar on a regular website.` : 
+        reason;
+        
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon48.png',
+        title: title,
+        message: message
+      });
+    }
+    
+    // Update extension badge to indicate restriction/error
+    chrome.action.setBadgeText({ text: isExpectedRestriction ? 'i' : '!', tabId: tab.id });
+    chrome.action.setBadgeBackgroundColor({ 
+      color: isExpectedRestriction ? '#2196F3' : '#ff4444', 
+      tabId: tab.id 
+    });
     
     // Clear badge after 5 seconds
     setTimeout(() => {
@@ -287,7 +310,7 @@ async function showInjectionError(tab, reason) {
     }, 5000);
     
   } catch (error) {
-    console.error('Error showing injection error:', error);
+    console.error('Error showing injection restriction/error:', error);
   }
 }
 
