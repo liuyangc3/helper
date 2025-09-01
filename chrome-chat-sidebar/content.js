@@ -330,7 +330,7 @@ function showSidebar() {
 
       // Initialize chat history and focus on message input
       setTimeout(() => {
-        initializeChatHistory();
+        initializeChatHistoryOptimized();
         const messageInput = sidebarContainer.querySelector('#message-input');
         if (messageInput) {
           messageInput.focus();
@@ -564,21 +564,56 @@ function removeSidebar() {
   }
 }
 
-// Message rendering functions
-function createMessageElement(message) {
+// Virtual scrolling configuration
+const VIRTUAL_SCROLL_CONFIG = {
+  itemHeight: 80, // Estimated height per message in pixels
+  bufferSize: 5,  // Number of items to render outside visible area
+  threshold: 100  // Minimum messages before enabling virtual scrolling
+};
+
+// Virtual scrolling state
+let virtualScrollState = {
+  enabled: false,
+  allMessages: [],
+  visibleStartIndex: 0,
+  visibleEndIndex: 0,
+  scrollContainer: null,
+  messageContainer: null,
+  spacerTop: null,
+  spacerBottom: null
+};
+
+// Message rendering functions with virtual scrolling support
+function createMessageElement(message, index = -1) {
   const messageElement = document.createElement('div');
   messageElement.className = 'message-item';
   messageElement.setAttribute('data-message-id', message.id);
   messageElement.setAttribute('data-message-type', message.type);
+  
+  // Add index for virtual scrolling
+  if (index >= 0) {
+    messageElement.setAttribute('data-index', index);
+  }
 
   const timestamp = formatTimestamp(message.timestamp);
 
-  messageElement.innerHTML = `
-    <div class="message-bubble ${message.type}">
-      <div class="message-content">${escapeHtml(message.content)}</div>
-      <div class="message-timestamp" title="${new Date(message.timestamp).toLocaleString()}">${timestamp}</div>
-    </div>
-  `;
+  // Use DocumentFragment for better performance
+  const fragment = document.createDocumentFragment();
+  const bubble = document.createElement('div');
+  bubble.className = `message-bubble ${message.type}`;
+  
+  const content = document.createElement('div');
+  content.className = 'message-content';
+  content.textContent = message.content; // Use textContent for better performance and security
+  
+  const timestampEl = document.createElement('div');
+  timestampEl.className = 'message-timestamp';
+  timestampEl.title = new Date(message.timestamp).toLocaleString();
+  timestampEl.textContent = timestamp;
+  
+  bubble.appendChild(content);
+  bubble.appendChild(timestampEl);
+  messageElement.appendChild(bubble);
 
   return messageElement;
 }
@@ -616,6 +651,14 @@ function escapeHtml(text) {
 function addMessageToHistory(message) {
   if (!sidebarContainer) return;
 
+  // Add to virtual scroll state if enabled
+  if (virtualScrollState.enabled) {
+    virtualScrollState.allMessages.push(message);
+    updateVirtualScroll();
+    scrollToLatestMessage();
+    return;
+  }
+
   const messageList = sidebarContainer.querySelector('#message-list');
   const welcomeMessage = messageList.querySelector('.welcome-message');
 
@@ -625,13 +668,26 @@ function addMessageToHistory(message) {
   }
 
   // Create and add new message element
-  const messageElement = createMessageElement(message);
-  messageList.appendChild(messageElement);
+  const messageElement = createMessageElement(message, virtualScrollState.allMessages.length);
+  
+  // Use DocumentFragment for better performance when adding multiple elements
+  const fragment = document.createDocumentFragment();
+  fragment.appendChild(messageElement);
+  messageList.appendChild(fragment);
+
+  // Store message in virtual scroll state
+  virtualScrollState.allMessages.push(message);
+
+  // Check if we should enable virtual scrolling
+  if (virtualScrollState.allMessages.length >= VIRTUAL_SCROLL_CONFIG.threshold && !virtualScrollState.enabled) {
+    enableVirtualScrolling();
+    return;
+  }
 
   // Auto-scroll to latest message
   scrollToLatestMessage();
 
-  // Add fade-in animation
+  // Add fade-in animation with RAF for better performance
   requestAnimationFrame(() => {
     messageElement.classList.add('message-fade-in');
   });
@@ -649,6 +705,9 @@ function scrollToLatestMessage() {
 function renderMessageHistory(messages) {
   if (!sidebarContainer || !messages || messages.length === 0) return;
 
+  // Store messages in virtual scroll state
+  virtualScrollState.allMessages = [...messages];
+
   const messageList = sidebarContainer.querySelector('#message-list');
 
   // Clear existing messages except welcome message
@@ -663,14 +722,25 @@ function renderMessageHistory(messages) {
     }
   }
 
-  // Add all messages
-  messages.forEach(message => {
-    const messageElement = createMessageElement(message);
-    messageList.appendChild(messageElement);
+  // Check if we should use virtual scrolling
+  if (messages.length >= VIRTUAL_SCROLL_CONFIG.threshold) {
+    enableVirtualScrolling();
+    return;
+  }
+
+  // Render messages normally for small lists
+  const fragment = document.createDocumentFragment();
+  messages.forEach((message, index) => {
+    const messageElement = createMessageElement(message, index);
+    fragment.appendChild(messageElement);
   });
+  
+  messageList.appendChild(fragment);
 
   // Scroll to latest message
-  scrollToLatestMessage();
+  requestAnimationFrame(() => {
+    scrollToLatestMessage();
+  });
 }
 
 async function sendMessage() {
@@ -929,6 +999,213 @@ function showMessageError(messageId, errorText) {
   }, 5000);
 }
 
+// Virtual scrolling implementation
+function enableVirtualScrolling() {
+  if (!sidebarContainer || virtualScrollState.enabled) return;
+
+  console.log('Enabling virtual scrolling for', virtualScrollState.allMessages.length, 'messages');
+  
+  const chatHistory = sidebarContainer.querySelector('#chat-history');
+  const messageList = sidebarContainer.querySelector('#message-list');
+  
+  if (!chatHistory || !messageList) return;
+
+  virtualScrollState.enabled = true;
+  virtualScrollState.scrollContainer = chatHistory;
+  virtualScrollState.messageContainer = messageList;
+
+  // Create spacer elements for virtual scrolling
+  virtualScrollState.spacerTop = document.createElement('div');
+  virtualScrollState.spacerTop.className = 'virtual-scroll-spacer-top';
+  virtualScrollState.spacerTop.style.height = '0px';
+
+  virtualScrollState.spacerBottom = document.createElement('div');
+  virtualScrollState.spacerBottom.className = 'virtual-scroll-spacer-bottom';
+  virtualScrollState.spacerBottom.style.height = '0px';
+
+  // Clear existing messages and add spacers
+  messageList.innerHTML = '';
+  messageList.appendChild(virtualScrollState.spacerTop);
+  messageList.appendChild(virtualScrollState.spacerBottom);
+
+  // Add scroll listener with throttling
+  let scrollTimeout;
+  const handleScroll = () => {
+    if (scrollTimeout) return;
+    scrollTimeout = requestAnimationFrame(() => {
+      updateVirtualScroll();
+      scrollTimeout = null;
+    });
+  };
+
+  chatHistory.addEventListener('scroll', handleScroll, { passive: true });
+
+  // Initial render
+  updateVirtualScroll();
+}
+
+function updateVirtualScroll() {
+  if (!virtualScrollState.enabled || !virtualScrollState.scrollContainer) return;
+
+  const scrollTop = virtualScrollState.scrollContainer.scrollTop;
+  const containerHeight = virtualScrollState.scrollContainer.clientHeight;
+  const itemHeight = VIRTUAL_SCROLL_CONFIG.itemHeight;
+  const bufferSize = VIRTUAL_SCROLL_CONFIG.bufferSize;
+  const totalItems = virtualScrollState.allMessages.length;
+
+  // Calculate visible range
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - bufferSize);
+  const endIndex = Math.min(totalItems - 1, Math.ceil((scrollTop + containerHeight) / itemHeight) + bufferSize);
+
+  // Only update if range changed
+  if (startIndex === virtualScrollState.visibleStartIndex && endIndex === virtualScrollState.visibleEndIndex) {
+    return;
+  }
+
+  virtualScrollState.visibleStartIndex = startIndex;
+  virtualScrollState.visibleEndIndex = endIndex;
+
+  // Update spacer heights
+  const topSpacerHeight = startIndex * itemHeight;
+  const bottomSpacerHeight = (totalItems - endIndex - 1) * itemHeight;
+
+  virtualScrollState.spacerTop.style.height = `${topSpacerHeight}px`;
+  virtualScrollState.spacerBottom.style.height = `${bottomSpacerHeight}px`;
+
+  // Render visible messages
+  renderVisibleMessages(startIndex, endIndex);
+}
+
+function renderVisibleMessages(startIndex, endIndex) {
+  if (!virtualScrollState.messageContainer) return;
+
+  // Remove existing message elements (keep spacers)
+  const existingMessages = virtualScrollState.messageContainer.querySelectorAll('.message-item');
+  existingMessages.forEach(msg => msg.remove());
+
+  // Create fragment for batch DOM updates
+  const fragment = document.createDocumentFragment();
+
+  // Render visible messages
+  for (let i = startIndex; i <= endIndex; i++) {
+    if (i >= 0 && i < virtualScrollState.allMessages.length) {
+      const message = virtualScrollState.allMessages[i];
+      const messageElement = createMessageElement(message, i);
+      
+      // Add fade-in animation for new messages
+      requestAnimationFrame(() => {
+        messageElement.classList.add('message-fade-in');
+      });
+      
+      fragment.appendChild(messageElement);
+    }
+  }
+
+  // Insert messages between spacers
+  virtualScrollState.messageContainer.insertBefore(fragment, virtualScrollState.spacerBottom);
+}
+
+function scrollToLatestMessage() {
+  if (!sidebarContainer) return;
+
+  const chatHistory = sidebarContainer.querySelector('#chat-history');
+  if (!chatHistory) return;
+
+  // Use smooth scrolling with RAF for better performance
+  requestAnimationFrame(() => {
+    if (virtualScrollState.enabled) {
+      // For virtual scrolling, scroll to bottom
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+    } else {
+      // For normal scrolling, use smooth behavior
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+  });
+}
+
+// Lazy loading implementation for message history
+function loadMessagesLazily(offset = 0, limit = 50) {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage({
+        action: 'getMessages',
+        sessionId: null,
+        offset: offset,
+        limit: limit
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error loading messages:', chrome.runtime.lastError.message);
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+
+        if (response && response.success) {
+          resolve({
+            messages: response.data.messages || [],
+            hasMore: response.data.hasMore || false,
+            total: response.data.total || 0
+          });
+        } else {
+          console.error('Failed to load messages:', response?.error);
+          reject(new Error(response?.error || 'Unknown error'));
+        }
+      });
+    } catch (error) {
+      console.error('Error in loadMessagesLazily:', error);
+      reject(error);
+    }
+  });
+}
+
+// Optimized DOM manipulation functions
+function batchDOMUpdates(updates) {
+  // Use DocumentFragment for batch updates
+  const fragment = document.createDocumentFragment();
+  
+  // Disable transitions temporarily for better performance
+  const container = virtualScrollState.messageContainer || sidebarContainer?.querySelector('#message-list');
+  if (container) {
+    container.style.transition = 'none';
+  }
+
+  // Apply all updates
+  updates.forEach(update => {
+    if (typeof update === 'function') {
+      update(fragment);
+    }
+  });
+
+  // Re-enable transitions
+  if (container) {
+    requestAnimationFrame(() => {
+      container.style.transition = '';
+    });
+  }
+
+  return fragment;
+}
+
+// Debounced scroll handler for better performance
+function createDebouncedScrollHandler(handler, delay = 16) {
+  let timeoutId;
+  let lastExecTime = 0;
+  
+  return function(...args) {
+    const currentTime = Date.now();
+    
+    if (currentTime - lastExecTime > delay) {
+      handler.apply(this, args);
+      lastExecTime = currentTime;
+    } else {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handler.apply(this, args);
+        lastExecTime = Date.now();
+      }, delay);
+    }
+  };
+}
+
 // Message loading and display logic
 function loadMessagesFromStorage() {
   return new Promise((resolve, reject) => {
@@ -1124,6 +1401,50 @@ function performStorageCleanup() {
   }
 }
 
+// Optimized chat history initialization with lazy loading
+async function initializeChatHistoryOptimized() {
+  if (!sidebarContainer) return;
+
+  const messageList = sidebarContainer.querySelector('#message-list');
+  const chatHistory = sidebarContainer.querySelector('#chat-history');
+  
+  if (!messageList || !chatHistory) return;
+
+  try {
+    // Show loading indicator
+    showLoadingIndicator();
+
+    // Load initial batch of messages (most recent)
+    const result = await loadMessagesLazily(0, 50);
+    
+    if (result.messages && result.messages.length > 0) {
+      // Store messages and render
+      virtualScrollState.allMessages = result.messages;
+      
+      // Check if we need virtual scrolling
+      if (result.messages.length >= VIRTUAL_SCROLL_CONFIG.threshold) {
+        enableVirtualScrolling();
+      } else {
+        renderMessageHistory(result.messages);
+      }
+
+      // Set up lazy loading for older messages if there are more
+      if (result.hasMore) {
+        setupLazyLoadingForOlderMessages(result.total);
+      }
+    } else {
+      // No messages, show welcome message
+      showWelcomeMessage();
+    }
+
+    hideLoadingIndicator();
+  } catch (error) {
+    console.error('Error initializing chat history:', error);
+    hideLoadingIndicator();
+    showErrorState('Failed to load chat history');
+  }
+}
+
 async function initializeChatHistory() {
   if (!sidebarContainer) return;
 
@@ -1148,6 +1469,117 @@ async function initializeChatHistory() {
     console.error('Error initializing chat history:', error);
     hideLoadingState();
     showErrorState('Failed to load chat history');
+  }
+}
+
+// Optimized loading indicators
+function showLoadingIndicator() {
+  if (!sidebarContainer) return;
+
+  const messageList = sidebarContainer.querySelector('#message-list');
+  const existingLoading = messageList.querySelector('.lazy-loading-indicator');
+
+  if (!existingLoading) {
+    const loadingElement = document.createElement('div');
+    loadingElement.className = 'lazy-loading-indicator';
+    loadingElement.innerHTML = `
+      <div class="lazy-loading-spinner"></div>
+      <span>Loading messages...</span>
+    `;
+    messageList.appendChild(loadingElement);
+  }
+}
+
+function hideLoadingIndicator() {
+  if (!sidebarContainer) return;
+
+  const messageList = sidebarContainer.querySelector('#message-list');
+  const loadingElement = messageList.querySelector('.lazy-loading-indicator');
+
+  if (loadingElement) {
+    loadingElement.remove();
+  }
+}
+
+// Set up lazy loading for older messages
+function setupLazyLoadingForOlderMessages(totalMessages) {
+  if (!sidebarContainer || !virtualScrollState.scrollContainer) return;
+
+  let isLoadingOlder = false;
+  const loadMoreThreshold = 200; // pixels from top
+
+  const handleScrollForLazyLoad = createDebouncedScrollHandler(async () => {
+    if (isLoadingOlder) return;
+
+    const scrollTop = virtualScrollState.scrollContainer.scrollTop;
+    
+    // Check if user scrolled near the top
+    if (scrollTop < loadMoreThreshold && virtualScrollState.allMessages.length < totalMessages) {
+      isLoadingOlder = true;
+      
+      try {
+        // Show loading indicator at top
+        showTopLoadingIndicator();
+        
+        // Load older messages
+        const currentCount = virtualScrollState.allMessages.length;
+        const result = await loadMessagesLazily(currentCount, 25);
+        
+        if (result.messages && result.messages.length > 0) {
+          // Prepend older messages
+          virtualScrollState.allMessages = [...result.messages, ...virtualScrollState.allMessages];
+          
+          // Update virtual scroll if enabled
+          if (virtualScrollState.enabled) {
+            // Maintain scroll position
+            const previousScrollHeight = virtualScrollState.scrollContainer.scrollHeight;
+            updateVirtualScroll();
+            const newScrollHeight = virtualScrollState.scrollContainer.scrollHeight;
+            virtualScrollState.scrollContainer.scrollTop = scrollTop + (newScrollHeight - previousScrollHeight);
+          } else {
+            // Re-render all messages
+            renderMessageHistory(virtualScrollState.allMessages);
+          }
+        }
+        
+        hideTopLoadingIndicator();
+      } catch (error) {
+        console.error('Error loading older messages:', error);
+        hideTopLoadingIndicator();
+      } finally {
+        isLoadingOlder = false;
+      }
+    }
+  }, 100);
+
+  virtualScrollState.scrollContainer.addEventListener('scroll', handleScrollForLazyLoad, { passive: true });
+}
+
+function showTopLoadingIndicator() {
+  if (!sidebarContainer) return;
+
+  const messageList = sidebarContainer.querySelector('#message-list');
+  const existingIndicator = messageList.querySelector('.top-loading-indicator');
+
+  if (!existingIndicator) {
+    const indicator = document.createElement('div');
+    indicator.className = 'lazy-loading-indicator top-loading-indicator';
+    indicator.innerHTML = `
+      <div class="lazy-loading-spinner"></div>
+      <span>Loading older messages...</span>
+    `;
+    messageList.insertBefore(indicator, messageList.firstChild);
+  }
+}
+
+function hideTopLoadingIndicator() {
+  if (!sidebarContainer) return;
+
+  const messageList = sidebarContainer.querySelector('#message-list');
+  const indicator = messageList.querySelector('.top-loading-indicator');
+
+  if (indicator) {
+    indicator.remove();
   }
 }
 

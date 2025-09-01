@@ -544,10 +544,103 @@
 .chrome-chat-sidebar-container .message-item {
   contain: layout style paint !important;
   will-change: transform, opacity !important;
+  transform: translateZ(0) !important; /* Force hardware acceleration */
 }
 
 .chrome-chat-sidebar-container .message-bubble {
   contain: layout style paint !important;
+  transform: translateZ(0) !important; /* Force hardware acceleration */
+}
+
+/* Virtual scrolling spacers */
+.chrome-chat-sidebar-container .virtual-scroll-spacer-top,
+.chrome-chat-sidebar-container .virtual-scroll-spacer-bottom {
+  width: 100% !important;
+  flex-shrink: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Optimized scrolling performance */
+.chrome-chat-sidebar-container .chat-history {
+  /* Enable hardware acceleration for scrolling */
+  transform: translateZ(0) !important;
+  -webkit-overflow-scrolling: touch !important;
+  
+  /* Optimize scroll performance */
+  scroll-behavior: auto !important; /* Disable smooth scrolling for virtual scroll */
+  contain: layout style paint !important;
+  
+  /* Reduce paint operations during scroll */
+  will-change: scroll-position !important;
+}
+
+/* Virtual scrolling enabled state */
+.chrome-chat-sidebar-container .chat-history.virtual-scroll-enabled {
+  scroll-behavior: auto !important;
+}
+
+.chrome-chat-sidebar-container .message-list.virtual-scroll-enabled {
+  /* Optimize for virtual scrolling */
+  contain: layout style !important;
+  will-change: contents !important;
+}
+
+/* Reduce reflows during virtual scrolling */
+.chrome-chat-sidebar-container .message-item.virtual-item {
+  position: relative !important;
+  contain: layout style paint !important;
+  will-change: transform !important;
+}
+
+/* Loading state for lazy loading */
+.chrome-chat-sidebar-container .lazy-loading-indicator {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 16px !important;
+  color: #656d76 !important;
+  font-size: 12px !important;
+  opacity: 0.8 !important;
+}
+
+.chrome-chat-sidebar-container .lazy-loading-spinner {
+  width: 16px !important;
+  height: 16px !important;
+  border: 2px solid #e1e4e8 !important;
+  border-top: 2px solid #0969da !important;
+  border-radius: 50% !important;
+  animation: spin 1s linear infinite !important;
+  margin-right: 8px !important;
+}
+
+/* Optimize animations for performance */
+@media (prefers-reduced-motion: no-preference) {
+  .chrome-chat-sidebar-container .message-item {
+    transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                opacity 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+  }
+}
+
+/* Disable animations during virtual scrolling for performance */
+.chrome-chat-sidebar-container .chat-history.virtual-scroll-enabled .message-item {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Re-enable animations for new messages */
+.chrome-chat-sidebar-container .message-item.message-fade-in {
+  animation: messageFadeIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards !important;
+}
+
+@keyframes messageFadeIn {
+  0% {
+    opacity: 0 !important;
+    transform: translateY(10px) scale(0.98) !important;
+  }
+  100% {
+    opacity: 1 !important;
+    transform: translateY(0) scale(1) !important;
+  }
 }
 
 /* Message Input Container */

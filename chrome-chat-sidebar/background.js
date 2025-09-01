@@ -98,7 +98,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
       
     case 'getMessages':
-      handleGetMessages(message.sessionId, sendResponse);
+      handleGetMessages(message, sendResponse);
       return true;
       
     case 'createSession':
@@ -197,13 +197,13 @@ async function checkAndHandleInjection(tab) {
       let reason = 'Restricted page';
       
       if (tab.url.startsWith('chrome:')) {
-        reason = 'Chrome internal pages are not supported';
+        reason = 'Chat sidebar cannot be used on Chrome internal pages (chrome://)';
       } else if (tab.url.startsWith('file:')) {
-        reason = 'Local files are not supported';
+        reason = 'Chat sidebar cannot be used on local files (file://)';
       } else if (tab.url.startsWith('chrome-extension:')) {
-        reason = 'Extension pages are not supported';
+        reason = 'Chat sidebar cannot be used on extension pages';
       } else if (urlObj.hostname.includes('chrome.google.com')) {
-        reason = 'Chrome Web Store pages are not supported';
+        reason = 'Chat sidebar cannot be used on Chrome Web Store pages';
       }
       
       return { success: false, reason };
@@ -257,29 +257,52 @@ async function sendMessageWithRetry(tabId, message, maxRetries = 3, delay = 1000
   }
 }
 
-// Show user-friendly error for injection failures
+// Show user-friendly message for injection restrictions and errors
+// Distinguishes between expected restrictions (Chrome internal pages) and actual errors
 async function showInjectionError(tab, reason) {
   try {
-    // Log the error for debugging
-    await logError('injection_failed', new Error(reason), { 
-      tabId: tab.id, 
-      url: tab.url,
-      reason 
-    });
+    // Determine if this is an expected restriction or an actual error
+    const isExpectedRestriction = reason.includes('Chrome internal pages') || 
+                                 reason.includes('local files') || 
+                                 reason.includes('extension pages') || 
+                                 reason.includes('Chrome Web Store');
     
-    // Try to show a notification (if permissions allow)
-    if (chrome.notifications) {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Chat Sidebar Unavailable',
-        message: reason
+    if (isExpectedRestriction) {
+      // Log as info rather than error for expected restrictions
+      console.info(`[restriction_info] ${reason}`, { 
+        tabId: tab.id, 
+        url: tab.url 
+      });
+    } else {
+      // Log as actual error for unexpected injection failures
+      await logError('injection_failed', new Error(reason), { 
+        tabId: tab.id, 
+        url: tab.url,
+        reason 
       });
     }
     
-    // Update extension badge to indicate error
-    chrome.action.setBadgeText({ text: '!', tabId: tab.id });
-    chrome.action.setBadgeBackgroundColor({ color: '#ff4444', tabId: tab.id });
+    // Try to show a notification (if permissions allow)
+    if (chrome.notifications) {
+      const title = isExpectedRestriction ? 'Chat Sidebar Not Available' : 'Chat Sidebar Error';
+      const message = isExpectedRestriction ? 
+        `${reason}. Try using the sidebar on a regular website.` : 
+        reason;
+        
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon48.png',
+        title: title,
+        message: message
+      });
+    }
+    
+    // Update extension badge to indicate restriction/error
+    chrome.action.setBadgeText({ text: isExpectedRestriction ? 'i' : '!', tabId: tab.id });
+    chrome.action.setBadgeBackgroundColor({ 
+      color: isExpectedRestriction ? '#2196F3' : '#ff4444', 
+      tabId: tab.id 
+    });
     
     // Clear badge after 5 seconds
     setTimeout(() => {
@@ -287,7 +310,7 @@ async function showInjectionError(tab, reason) {
     }, 5000);
     
   } catch (error) {
-    console.error('Error showing injection error:', error);
+    console.error('Error showing injection restriction/error:', error);
   }
 }
 
@@ -655,22 +678,30 @@ async function handleSaveMessage(messageData, sendResponse) {
   }
 }
 
-async function handleGetMessages(sessionId, sendResponse) {
+async function handleGetMessages(message, sendResponse) {
   try {
+    // Extract parameters from message
+    const { sessionId: requestedSessionId, offset = 0, limit = 50 } = message || {};
+    
     // Get current session if not provided
+    let sessionId = requestedSessionId;
     if (!sessionId) {
       const result = await chrome.storage.local.get(['currentSession']);
       sessionId = result.currentSession || generateSessionId();
     }
     
-    // Retrieve messages for session
-    const messages = await getMessagesFromSession(sessionId);
+    // Retrieve messages for session with pagination
+    const result = await getMessagesFromSessionPaginated(sessionId, offset, limit);
     
     sendResponse({ 
       success: true, 
       data: {
-        messages: messages,
-        sessionId: sessionId
+        messages: result.messages,
+        sessionId: sessionId,
+        total: result.total,
+        hasMore: result.hasMore,
+        offset: offset,
+        limit: limit
       }
     });
   } catch (error) {
@@ -740,6 +771,76 @@ async function saveMessageToSession(sessionId, message) {
     await logError('save_message_failed', error, { sessionId, messageId: message.id });
     throw error;
   }
+}
+
+// Paginated message retrieval for performance optimization
+async function getMessagesFromSessionPaginated(sessionId, offset = 0, limit = 50) {
+  try {
+    const sessionKey = `session_${sessionId}`;
+    const result = await getStorageWithRetry([sessionKey]);
+    
+    const sessionData = result[sessionKey];
+    if (!sessionData) {
+      console.log(`No session found for ID: ${sessionId}`);
+      
+      // Try to restore from backup
+      const backupData = await restoreSessionFromBackup(sessionId);
+      if (backupData && backupData.messages) {
+        console.log(`Restored session ${sessionId} from backup`);
+        return paginateMessages(backupData.messages, offset, limit);
+      }
+      
+      return { messages: [], total: 0, hasMore: false };
+    }
+    
+    // Validate session data integrity
+    if (!validateSessionData(sessionData)) {
+      console.warn(`Session data corrupted for ${sessionId}, attempting recovery...`);
+      const recoveredData = await recoverCorruptedSession(sessionId, sessionData);
+      return paginateMessages(recoveredData.messages || [], offset, limit);
+    }
+    
+    return paginateMessages(sessionData.messages || [], offset, limit);
+  } catch (error) {
+    console.error('Error getting messages from session:', error);
+    await logError('get_messages_failed', error, { sessionId });
+    
+    // Try to recover from backup as last resort
+    try {
+      const backupData = await restoreSessionFromBackup(sessionId);
+      if (backupData && backupData.messages) {
+        return paginateMessages(backupData.messages, offset, limit);
+      }
+    } catch (backupError) {
+      console.error('Backup recovery also failed:', backupError);
+    }
+    
+    return { messages: [], total: 0, hasMore: false };
+  }
+}
+
+// Helper function to paginate messages
+function paginateMessages(messages, offset, limit) {
+  const total = messages.length;
+  
+  // For chat messages, we typically want newest first, so reverse the array
+  const sortedMessages = [...messages].sort((a, b) => b.timestamp - a.timestamp);
+  
+  // Apply pagination
+  const startIndex = Math.max(0, offset);
+  const endIndex = Math.min(total, startIndex + limit);
+  const paginatedMessages = sortedMessages.slice(startIndex, endIndex);
+  
+  // Reverse back to chronological order for display
+  const chronologicalMessages = paginatedMessages.reverse();
+  
+  return {
+    messages: chronologicalMessages,
+    total: total,
+    hasMore: endIndex < total,
+    offset: offset,
+    limit: limit
+  };
 }
 
 async function getMessagesFromSession(sessionId) {
