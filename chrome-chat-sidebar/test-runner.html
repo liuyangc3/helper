@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome Chat Sidebar - Test Runner</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #24292f;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .test-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .test-button {
+            padding: 12px 20px;
+            background: #0969da;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .test-button:hover {
+            background: #0860ca;
+        }
+        
+        .test-button:disabled {
+            background: #d1d9e0;
+            color: #656d76;
+            cursor: not-allowed;
+        }
+        
+        .test-button.running {
+            background: #d97706;
+        }
+        
+        .test-output {
+            background: #24292f;
+            color: #f0f6fc;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            max-height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-bottom: 20px;
+        }
+        
+        .test-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #d1d9e0;
+        }
+        
+        .status-indicator.running {
+            background: #d97706;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .status-indicator.passed {
+            background: #1a7f37;
+        }
+        
+        .status-indicator.failed {
+            background: #d1242f;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .test-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .result-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .result-card h3 {
+            margin: 0 0 15px 0;
+            color: #24292f;
+            font-size: 16px;
+        }
+        
+        .result-stat {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .result-stat .value {
+            font-weight: 600;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e1e4e8;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #1a7f37;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-fill.warning {
+            background: #d97706;
+        }
+        
+        .progress-fill.danger {
+            background: #d1242f;
+        }
+        
+        .clear-button {
+            background: #656d76;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .clear-button:hover {
+            background: #24292f;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: #656d76;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧪 Chrome Chat Sidebar Test Runner</h1>
+        <p>Comprehensive testing suite for performance, compatibility, and integration</p>
+    </div>
+    
+    <div class="test-status" id="testStatus">
+        <div class="status-indicator" id="statusIndicator"></div>
+        <span id="statusText">Ready to run tests</span>
+        <div style="margin-left: auto;">
+            <button class="clear-button" onclick="clearOutput()">Clear Output</button>
+        </div>
+    </div>
+    
+    <div class="test-controls">
+        <button class="test-button" onclick="runAllTests()" id="runAllBtn">
+            <span>🚀</span> Run All Tests
+        </button>
+        <button class="test-button" onclick="runQuickTests()" id="runQuickBtn">
+            <span>⚡</span> Quick Tests
+        </button>
+        <button class="test-button" onclick="runPerformanceTests()" id="runPerfBtn">
+            <span>📊</span> Performance Tests
+        </button>
+        <button class="test-button" onclick="runCompatibilityTests()" id="runCompatBtn">
+            <span>🌐</span> Compatibility Tests
+        </button>
+        <button class="test-button" onclick="runIntegrationTests()" id="runIntegBtn">
+            <span>🔗</span> Integration Tests
+        </button>
+        <button class="test-button" onclick="runUnitTests()" id="runUnitBtn">
+            <span>🧩</span> Unit Tests
+        </button>
+    </div>
+    
+    <div class="test-output" id="testOutput">
+Welcome to the Chrome Chat Sidebar Test Runner!
+
+Click any of the buttons above to start testing:
+• 🚀 Run All Tests - Complete test suite (recommended)
+• ⚡ Quick Tests - Unit and compatibility tests only
+• 📊 Performance Tests - Rendering and scrolling performance
+• 🌐 Compatibility Tests - Cross-browser compatibility
+• 🔗 Integration Tests - End-to-end workflows
+• 🧩 Unit Tests - Individual component tests
+
+The test output will appear here...
+    </div>
+    
+    <div class="test-results" id="testResults" style="display: none;">
+        <div class="result-card">
+            <h3>📊 Overall Results</h3>
+            <div class="result-stat">
+                <span>Total Tests:</span>
+                <span class="value" id="totalTests">0</span>
+            </div>
+            <div class="result-stat">
+                <span>Passed:</span>
+                <span class="value" id="passedTests">0</span>
+            </div>
+            <div class="result-stat">
+                <span>Failed:</span>
+                <span class="value" id="failedTests">0</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="overallProgress"></div>
+            </div>
+        </div>
+        
+        <div class="result-card">
+            <h3>🧩 Unit Tests</h3>
+            <div class="result-stat">
+                <span>Pass Rate:</span>
+                <span class="value" id="unitPassRate">N/A</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="unitProgress"></div>
+            </div>
+        </div>
+        
+        <div class="result-card">
+            <h3>🌐 Compatibility</h3>
+            <div class="result-stat">
+                <span>Pass Rate:</span>
+                <span class="value" id="compatPassRate">N/A</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="compatProgress"></div>
+            </div>
+        </div>
+        
+        <div class="result-card">
+            <h3>📊 Performance</h3>
+            <div class="result-stat">
+                <span>Pass Rate:</span>
+                <span class="value" id="perfPassRate">N/A</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="perfProgress"></div>
+            </div>
+        </div>
+        
+        <div class="result-card">
+            <h3>🔗 Integration</h3>
+            <div class="result-stat">
+                <span>Pass Rate:</span>
+                <span class="value" id="integPassRate">N/A</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="integProgress"></div>
+            </div>
+        </div>
+        
+        <div class="result-card">
+            <h3>⏱️ Test Duration</h3>
+            <div class="result-stat">
+                <span>Total Time:</span>
+                <span class="value" id="testDuration">0s</span>
+            </div>
+            <div class="result-stat">
+                <span>Browser:</span>
+                <span class="value" id="browserInfo">Unknown</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>Chrome Chat Sidebar Extension Test Suite v1.0</p>
+        <p>Tests extension functionality, performance, and compatibility</p>
+    </div>
+
+    <!-- Load test suites -->
+    <script src="performance-tests.js"></script>
+    <script src="compatibility-tests.js"></script>
+    <script src="integration-tests.js"></script>
+    <script src="run-all-tests.js"></script>
+    <script src="test-runner.js"></script>
+
+    <script>
+        // Test runner UI functionality
+        let isRunning = false;
+        let testStartTime = null;
+        
+        // Override console.log to capture output
+        const originalConsoleLog = console.log;
+        const testOutput = document.getElementById('testOutput');
+        
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            
+            testOutput.textContent += message + '\n';
+            testOutput.scrollTop = testOutput.scrollHeight;
+        };
+        
+        // Test runner functions
+        async function runAllTests() {
+            if (isRunning) return;
+            await executeTest('all', 'Run All Tests', async () => {
+                if (typeof window.runAllTests === 'function') {
+                    return await window.runAllTests();
+                } else {
+                    throw new Error('Test runner not loaded');
+                }
+            });
+        }
+        
+        async function runQuickTests() {
+            if (isRunning) return;
+            await executeTest('quick', 'Quick Tests', async () => {
+                if (typeof window.runQuickTests === 'function') {
+                    return await window.runQuickTests();
+                } else {
+                    throw new Error('Test runner not loaded');
+                }
+            });
+        }
+        
+        async function runPerformanceTests() {
+            if (isRunning) return;
+            await executeTest('performance', 'Performance Tests', async () => {
+                if (typeof window.runPerformanceTests === 'function') {
+                    return await window.runPerformanceTests();
+                } else if (typeof PerformanceTestSuite !== 'undefined') {
+                    const suite = new PerformanceTestSuite();
+                    await suite.runAllTests();
+                    return { performance: suite.results };
+                } else {
+                    throw new Error('Performance test suite not loaded');
+                }
+            });
+        }
+        
+        async function runCompatibilityTests() {
+            if (isRunning) return;
+            await executeTest('compatibility', 'Compatibility Tests', async () => {
+                if (typeof window.runCompatibilityTests === 'function') {
+                    return await window.runCompatibilityTests();
+                } else if (typeof CompatibilityTestSuite !== 'undefined') {
+                    const suite = new CompatibilityTestSuite();
+                    await suite.runAllTests();
+                    return { compatibility: suite.results };
+                } else {
+                    throw new Error('Compatibility test suite not loaded');
+                }
+            });
+        }
+        
+        async function runIntegrationTests() {
+            if (isRunning) return;
+            await executeTest('integration', 'Integration Tests', async () => {
+                if (typeof IntegrationTestSuite !== 'undefined') {
+                    const suite = new IntegrationTestSuite();
+                    await suite.runAllTests();
+                    return { integration: suite.results };
+                } else {
+                    throw new Error('Integration test suite not loaded');
+                }
+            });
+        }
+        
+        async function runUnitTests() {
+            if (isRunning) return;
+            await executeTest('unit', 'Unit Tests', async () => {
+                if (typeof window.runTests === 'function') {
+                    const results = await window.runTests();
+                    return { unit: results || [] };
+                } else {
+                    console.log('No unit tests found. Unit tests would typically be loaded from test-runner.js');
+                    return { unit: [] };
+                }
+            });
+        }
+        
+        async function executeTest(testType, testName, testFunction) {
+            if (isRunning) return;
+            
+            isRunning = true;
+            testStartTime = Date.now();
+            
+            // Update UI
+            updateTestStatus('running', `Running ${testName}...`);
+            disableAllButtons();
+            clearOutput();
+            
+            try {
+                console.log(`🚀 Starting ${testName}`);
+                console.log('='.repeat(50));
+                
+                const results = await testFunction();
+                
+                const duration = Date.now() - testStartTime;
+                console.log(`\n✅ ${testName} completed in ${(duration / 1000).toFixed(2)}s`);
+                
+                updateTestStatus('passed', `${testName} completed successfully`);
+                updateTestResults(results, duration);
+                
+            } catch (error) {
+                console.error(`❌ ${testName} failed:`, error.message);
+                updateTestStatus('failed', `${testName} failed: ${error.message}`);
+            } finally {
+                isRunning = false;
+                enableAllButtons();
+            }
+        }
+        
+        function updateTestStatus(status, message) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            indicator.className = `status-indicator ${status}`;
+            statusText.textContent = message;
+        }
+        
+        function disableAllButtons() {
+            const buttons = document.querySelectorAll('.test-button');
+            buttons.forEach(button => {
+                button.disabled = true;
+                button.classList.add('running');
+            });
+        }
+        
+        function enableAllButtons() {
+            const buttons = document.querySelectorAll('.test-button');
+            buttons.forEach(button => {
+                button.disabled = false;
+                button.classList.remove('running');
+            });
+        }
+        
+        function clearOutput() {
+            testOutput.textContent = '';
+        }
+        
+        function updateTestResults(results, duration) {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.style.display = 'grid';
+            
+            // Calculate overall stats
+            let totalTests = 0;
+            let passedTests = 0;
+            
+            Object.values(results || {}).forEach(categoryResults => {
+                if (Array.isArray(categoryResults)) {
+                    totalTests += categoryResults.length;
+                    passedTests += categoryResults.filter(test => test.passed).length;
+                }
+            });
+            
+            // Update overall results
+            document.getElementById('totalTests').textContent = totalTests;
+            document.getElementById('passedTests').textContent = passedTests;
+            document.getElementById('failedTests').textContent = totalTests - passedTests;
+            document.getElementById('testDuration').textContent = `${(duration / 1000).toFixed(2)}s`;
+            
+            // Update browser info
+            const browserInfo = navigator.userAgent.includes('Chrome') ? 
+                `Chrome ${navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'Unknown'}` : 
+                'Unknown Browser';
+            document.getElementById('browserInfo').textContent = browserInfo;
+            
+            // Update overall progress
+            const overallPassRate = totalTests > 0 ? (passedTests / totalTests) * 100 : 0;
+            updateProgressBar('overallProgress', overallPassRate);
+            
+            // Update category-specific results
+            const categories = ['unit', 'compatibility', 'performance', 'integration'];
+            categories.forEach(category => {
+                const categoryResults = results?.[category] || [];
+                if (categoryResults.length > 0) {
+                    const categoryPassed = categoryResults.filter(test => test.passed).length;
+                    const categoryTotal = categoryResults.length;
+                    const categoryPassRate = (categoryPassed / categoryTotal) * 100;
+                    
+                    const shortName = category === 'compatibility' ? 'compat' : 
+                                    category === 'performance' ? 'perf' : 
+                                    category === 'integration' ? 'integ' : category;
+                    
+                    document.getElementById(`${shortName}PassRate`).textContent = `${categoryPassRate.toFixed(1)}%`;
+                    updateProgressBar(`${shortName}Progress`, categoryPassRate);
+                } else {
+                    const shortName = category === 'compatibility' ? 'compat' : 
+                                    category === 'performance' ? 'perf' : 
+                                    category === 'integration' ? 'integ' : category;
+                    
+                    document.getElementById(`${shortName}PassRate`).textContent = 'N/A';
+                    updateProgressBar(`${shortName}Progress`, 0);
+                }
+            });
+        }
+        
+        function updateProgressBar(elementId, percentage) {
+            const progressBar = document.getElementById(elementId);
+            progressBar.style.width = `${percentage}%`;
+            
+            // Update color based on percentage
+            progressBar.className = 'progress-fill';
+            if (percentage < 50) {
+                progressBar.classList.add('danger');
+            } else if (percentage < 80) {
+                progressBar.classList.add('warning');
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🧪 Test Runner initialized');
+            console.log('Click a button above to start testing!');
+            
+            // Check if test suites are loaded
+            const suites = [];
+            if (typeof PerformanceTestSuite !== 'undefined') suites.push('Performance');
+            if (typeof CompatibilityTestSuite !== 'undefined') suites.push('Compatibility');
+            if (typeof IntegrationTestSuite !== 'undefined') suites.push('Integration');
+            if (typeof ComprehensiveTestRunner !== 'undefined') suites.push('Comprehensive Runner');
+            
+            if (suites.length > 0) {
+                console.log(`✅ Loaded test suites: ${suites.join(', ')}`);
+            } else {
+                console.log('⚠️ No test suites loaded. Make sure all test files are included.');
+            }
+        });
+    </script>
+</body>
+</html>

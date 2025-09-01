@@ -98,7 +98,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
       
     case 'getMessages':
-      handleGetMessages(message.sessionId, sendResponse);
+      handleGetMessages(message, sendResponse);
       return true;
       
     case 'createSession':
@@ -678,22 +678,30 @@ async function handleSaveMessage(messageData, sendResponse) {
   }
 }
 
-async function handleGetMessages(sessionId, sendResponse) {
+async function handleGetMessages(message, sendResponse) {
   try {
+    // Extract parameters from message
+    const { sessionId: requestedSessionId, offset = 0, limit = 50 } = message || {};
+    
     // Get current session if not provided
+    let sessionId = requestedSessionId;
     if (!sessionId) {
       const result = await chrome.storage.local.get(['currentSession']);
       sessionId = result.currentSession || generateSessionId();
     }
     
-    // Retrieve messages for session
-    const messages = await getMessagesFromSession(sessionId);
+    // Retrieve messages for session with pagination
+    const result = await getMessagesFromSessionPaginated(sessionId, offset, limit);
     
     sendResponse({ 
       success: true, 
       data: {
-        messages: messages,
-        sessionId: sessionId
+        messages: result.messages,
+        sessionId: sessionId,
+        total: result.total,
+        hasMore: result.hasMore,
+        offset: offset,
+        limit: limit
       }
     });
   } catch (error) {
@@ -763,6 +771,76 @@ async function saveMessageToSession(sessionId, message) {
     await logError('save_message_failed', error, { sessionId, messageId: message.id });
     throw error;
   }
+}
+
+// Paginated message retrieval for performance optimization
+async function getMessagesFromSessionPaginated(sessionId, offset = 0, limit = 50) {
+  try {
+    const sessionKey = `session_${sessionId}`;
+    const result = await getStorageWithRetry([sessionKey]);
+    
+    const sessionData = result[sessionKey];
+    if (!sessionData) {
+      console.log(`No session found for ID: ${sessionId}`);
+      
+      // Try to restore from backup
+      const backupData = await restoreSessionFromBackup(sessionId);
+      if (backupData && backupData.messages) {
+        console.log(`Restored session ${sessionId} from backup`);
+        return paginateMessages(backupData.messages, offset, limit);
+      }
+      
+      return { messages: [], total: 0, hasMore: false };
+    }
+    
+    // Validate session data integrity
+    if (!validateSessionData(sessionData)) {
+      console.warn(`Session data corrupted for ${sessionId}, attempting recovery...`);
+      const recoveredData = await recoverCorruptedSession(sessionId, sessionData);
+      return paginateMessages(recoveredData.messages || [], offset, limit);
+    }
+    
+    return paginateMessages(sessionData.messages || [], offset, limit);
+  } catch (error) {
+    console.error('Error getting messages from session:', error);
+    await logError('get_messages_failed', error, { sessionId });
+    
+    // Try to recover from backup as last resort
+    try {
+      const backupData = await restoreSessionFromBackup(sessionId);
+      if (backupData && backupData.messages) {
+        return paginateMessages(backupData.messages, offset, limit);
+      }
+    } catch (backupError) {
+      console.error('Backup recovery also failed:', backupError);
+    }
+    
+    return { messages: [], total: 0, hasMore: false };
+  }
+}
+
+// Helper function to paginate messages
+function paginateMessages(messages, offset, limit) {
+  const total = messages.length;
+  
+  // For chat messages, we typically want newest first, so reverse the array
+  const sortedMessages = [...messages].sort((a, b) => b.timestamp - a.timestamp);
+  
+  // Apply pagination
+  const startIndex = Math.max(0, offset);
+  const endIndex = Math.min(total, startIndex + limit);
+  const paginatedMessages = sortedMessages.slice(startIndex, endIndex);
+  
+  // Reverse back to chronological order for display
+  const chronologicalMessages = paginatedMessages.reverse();
+  
+  return {
+    messages: chronologicalMessages,
+    total: total,
+    hasMore: endIndex < total,
+    offset: offset,
+    limit: limit
+  };
 }
 
 async function getMessagesFromSession(sessionId) {

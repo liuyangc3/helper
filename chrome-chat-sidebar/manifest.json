@@ -54,7 +54,12 @@
         "test-websites.js",
         "tests/e2e.test.js",
         "tests/performance.test.js",
-        "test-runner.js"
+        "test-runner.js",
+        "performance-tests.js",
+        "compatibility-tests.js",
+        "integration-tests.js",
+        "run-all-tests.js",
+        "test-runner.html"
       ],
       "matches": ["http://*/*", "https://*/*"]
     }
